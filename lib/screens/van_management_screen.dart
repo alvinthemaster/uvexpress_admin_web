@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/van_provider.dart';
+import '../providers/booking_provider.dart';
 import '../models/van_model.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
@@ -15,6 +16,29 @@ class VanManagementScreen extends StatefulWidget {
 class _VanManagementScreenState extends State<VanManagementScreen> {
   String _searchQuery = '';
   String _statusFilter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    // Debug van data after a short delay to let providers initialize
+    Future.delayed(Duration(seconds: 2), () {
+      _debugVanData();
+    });
+  }
+
+  void _debugVanData() {
+    try {
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      print('=== VAN DEBUG INFO ===');
+      print('Total vans: ${vanProvider.vans.length}');
+      for (var van in vanProvider.vans) {
+        print('Van: ${van.plateNumber}, Status: "${van.status}", StatusDisplay: "${van.statusDisplay}"');
+      }
+      print('=== END VAN DEBUG ===');
+    } catch (e) {
+      print('Debug error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +81,20 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
             ],
           ),
         ),
-        ElevatedButton.icon(
-          onPressed: () => _showAddVanDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('Add Van'),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _showAddVanDialog(),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Van'),
+            ),
+            const SizedBox(width: AppConstants.smallPadding),
+            OutlinedButton.icon(
+              onPressed: () => _initializeSampleData(),
+              icon: const Icon(Icons.data_object),
+              label: const Text('Add Sample Vans'),
+            ),
+          ],
         ),
       ],
     );
@@ -270,6 +304,56 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     );
   }
 
+  Future<void> _initializeSampleData() async {
+    try {
+      final bookingProvider = Provider.of<BookingProvider>(context, listen: false);
+      
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Initializing sample vans...'),
+            ],
+          ),
+        ),
+      );
+      
+      await bookingProvider.initializeSampleVans();
+      
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      // Debug: Check the created vans
+      await Future.delayed(Duration(milliseconds: 500));
+      _debugVanData();
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sample vans initialized successfully! Check console for debug info.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error initializing sample vans: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _showEditVanDialog(Van van) {
     // TODO: Implement edit van dialog
     showDialog(
@@ -352,8 +436,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
   final _driverLicenseController = TextEditingController();
   final _driverContactController = TextEditingController();
   
-  String _selectedStatus = 'active';
-  bool _isActive = true;
+  String _selectedStatus = 'boarding'; // Default to boarding status
   bool _isLoading = false;
 
   @override
@@ -473,26 +556,6 @@ class _AddVanDialogState extends State<AddVanDialog> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: AppConstants.defaultPadding),
-                      
-                      // Status
-                      DropdownButtonFormField<String>(
-                        value: _selectedStatus,
-                        decoration: const InputDecoration(
-                          labelText: 'Initial Status',
-                          prefixIcon: Icon(Icons.info),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'active', child: Text('Active - Ready for service')),
-                          DropdownMenuItem(value: 'inactive', child: Text('Inactive - Not in service')),
-                          DropdownMenuItem(value: 'maintenance', child: Text('Maintenance - Under repair')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedStatus = value!;
-                          });
-                        },
-                      ),
                       const SizedBox(height: AppConstants.largePadding),
                       
                       // Driver Information Section
@@ -567,15 +630,37 @@ class _AddVanDialogState extends State<AddVanDialog> {
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
                       
-                      // Active Status
-                      SwitchListTile(
-                        title: const Text('Active Van'),
-                        subtitle: const Text('Enable this van for passenger bookings'),
-                        value: _isActive,
+                      // Van Status
+                      DropdownButtonFormField<String>(
+                        value: _selectedStatus,
+                        decoration: const InputDecoration(
+                          labelText: 'Van Status *',
+                          hintText: 'Select van status',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'boarding',
+                            child: Text('Boarding'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'in_queue',
+                            child: Text('In Queue (Ready)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'maintenance',
+                            child: Text('Maintenance'),
+                          ),
+                        ],
                         onChanged: (value) {
                           setState(() {
-                            _isActive = value;
+                            _selectedStatus = value ?? 'boarding';
                           });
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please select a van status';
+                          }
+                          return null;
                         },
                       ),
                     ],
@@ -656,8 +741,9 @@ class _AddVanDialogState extends State<AddVanDialog> {
         driver: driver,
         status: _selectedStatus,
         queuePosition: 0, // Will be set by service
-        isActive: _isActive,
+        isActive: ['boarding', 'in_queue'].contains(_selectedStatus), // Active if bookable
         createdAt: DateTime.now(),
+        currentOccupancy: 0, // Initialize with 0 occupancy
       );
 
       // Add the van

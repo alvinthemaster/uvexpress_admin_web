@@ -9,9 +9,12 @@ class BookingService {
   Stream<List<Booking>> getBookingsStream() {
     return _firestore
         .collection(_collection)
-        .orderBy('bookingDate', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+          bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+          return bookings;
+        });
   }
 
   // Get bookings by status
@@ -19,9 +22,12 @@ class BookingService {
     return _firestore
         .collection(_collection)
         .where('bookingStatus', isEqualTo: status)
-        .orderBy('bookingDate', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+          bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+          return bookings;
+        });
   }
 
   // Get bookings by payment status
@@ -40,9 +46,12 @@ class BookingService {
         .collection(_collection)
         .where('bookingDate', isGreaterThanOrEqualTo: startDate)
         .where('bookingDate', isLessThanOrEqualTo: endDate)
-        .orderBy('bookingDate', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+          bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+          return bookings;
+        });
   }
 
   // Get bookings by route
@@ -50,9 +59,12 @@ class BookingService {
     return _firestore
         .collection(_collection)
         .where('routeId', isEqualTo: routeId)
-        .orderBy('bookingDate', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final bookings = snapshot.docs.map((doc) => Booking.fromFirestore(doc)).toList();
+          bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+          return bookings;
+        });
   }
 
   // Get booking by ID

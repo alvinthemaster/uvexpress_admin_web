@@ -9,9 +9,12 @@ class VanService {
   Stream<List<Van>> getVansStream() {
     return _firestore
         .collection(_collection)
-        .orderBy('queuePosition')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final vans = snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList();
+          vans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+          return vans;
+        });
   }
 
   // Get active vans stream
@@ -19,9 +22,12 @@ class VanService {
     return _firestore
         .collection(_collection)
         .where('isActive', isEqualTo: true)
-        .orderBy('queuePosition')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final vans = snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList();
+          vans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+          return vans;
+        });
   }
 
   // Get vans by status
@@ -29,9 +35,12 @@ class VanService {
     return _firestore
         .collection(_collection)
         .where('status', isEqualTo: status)
-        .orderBy('queuePosition')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final vans = snapshot.docs.map((doc) => Van.fromFirestore(doc)).toList();
+          vans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+          return vans;
+        });
   }
 
   // Get van by ID
@@ -55,7 +64,12 @@ class VanService {
       int nextPosition = await _getNextQueuePosition();
       Van vanWithPosition = van.copyWith(queuePosition: nextPosition);
       
-      await _firestore.collection(_collection).add(vanWithPosition.toFirestore());
+      // Use the van's ID as the document ID, or auto-generate if empty
+      if (van.id.isNotEmpty) {
+        await _firestore.collection(_collection).doc(van.id).set(vanWithPosition.toFirestore());
+      } else {
+        await _firestore.collection(_collection).add(vanWithPosition.toFirestore());
+      }
     } catch (e) {
       print('Error adding van: $e');
       rethrow;

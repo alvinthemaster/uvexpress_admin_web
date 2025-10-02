@@ -1,13 +1,17 @@
 import 'package:flutter/foundation.dart';
 import '../models/booking_model.dart';
+import '../models/van_model.dart';
 import '../services/booking_service.dart';
+import '../services/van_service.dart';
 
 class BookingProvider with ChangeNotifier {
   final BookingService _bookingService = BookingService();
+  final VanService _vanService = VanService();
   
   List<Booking> _bookings = [];
   List<Booking> _todayBookings = [];
   List<Booking> _activeBookings = [];
+  List<Van> _vans = []; // Add van list for mobile app compatibility
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic> _statistics = {};
@@ -15,6 +19,7 @@ class BookingProvider with ChangeNotifier {
   List<Booking> get bookings => _bookings;
   List<Booking> get todayBookings => _todayBookings;
   List<Booking> get activeBookings => _activeBookings;
+  List<Van> get vans => _vans; // Add van getter for mobile app
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   Map<String, dynamic> get statistics => _statistics;
@@ -40,6 +45,14 @@ class BookingProvider with ChangeNotifier {
     _bookingService.getActiveBookings().listen((activeBookings) {
       _activeBookings = activeBookings;
       notifyListeners();
+    });
+
+    // Add van stream for mobile app compatibility
+    _vanService.getActiveVansStream().listen((vans) {
+      _vans = vans;
+      notifyListeners();
+    }, onError: (error) {
+      print('Error loading vans: $error');
     });
   }
 
@@ -172,4 +185,96 @@ class BookingProvider with ChangeNotifier {
   double get totalRevenue => _bookings
       .where((b) => b.paymentStatus == 'paid')
       .fold(0.0, (sum, booking) => sum + booking.totalAmount);
+
+  // Van-related methods for mobile app compatibility
+  Future<void> loadVans() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      // The vans are already loaded through the stream in _initializeStreams
+      // This method is kept for mobile app compatibility
+      
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> initializeSampleVans() async {
+    try {
+      print('Starting initializeSampleVans...');
+      
+      // Generate unique IDs with timestamp to avoid duplicates
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      
+      // Create sample vans with exact mobile app status values
+      final sampleVans = [
+        Van(
+          id: 'TEST1_$timestamp',
+          plateNumber: 'TEST1', 
+          capacity: 18,
+          driver: Driver(
+            id: 'driver_test1_$timestamp',
+            name: 'Juan Dela Cruz',
+            license: 'N03-12-123456',
+            contact: '09123456789',
+          ),
+          status: 'boarding',  // Mobile app expected status
+          queuePosition: 1,
+          isActive: true,
+          createdAt: DateTime.now(),
+          currentOccupancy: 0,
+        ),
+        Van(
+          id: 'TEST2_$timestamp',
+          plateNumber: 'TEST2',
+          capacity: 18,
+          driver: Driver(
+            id: 'driver_test2_$timestamp',
+            name: 'Maria Santos',
+            license: 'N03-12-123457',
+            contact: '09123456790',
+          ),
+          status: 'in_queue',  // Mobile app expected status
+          queuePosition: 2,
+          isActive: true,
+          createdAt: DateTime.now(),
+          currentOccupancy: 0,
+        ),
+      ];
+
+      print('Created ${sampleVans.length} sample vans');
+
+      // Add each van to Firestore
+      for (final van in sampleVans) {
+        print('Adding van ${van.plateNumber} with status: "${van.status}"');
+        try {
+          await _vanService.addVan(van);
+          print('Van ${van.plateNumber} added successfully');
+        } catch (vanError) {
+          print('Error adding van ${van.plateNumber}: $vanError');
+        }
+      }
+      
+      print('Sample vans initialization completed');
+      
+    } catch (e) {
+      print('Error initializing sample vans: $e');
+      rethrow; // Re-throw so the UI can handle the error
+    }
+  }
+
+  // Add routes-related methods for mobile app compatibility
+  List<dynamic> get routes => []; // Placeholder for routes
+
+  Future<void> loadRoutes() async {
+    // Placeholder method for mobile app compatibility
+  }
+
+  Future<void> initializeSampleData() async {
+    // Placeholder method for mobile app compatibility
+  }
 }
