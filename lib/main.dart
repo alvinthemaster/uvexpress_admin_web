@@ -14,6 +14,7 @@ import 'screens/van_management_screen.dart';
 import 'screens/booking_management_screen.dart';
 import 'screens/route_management_screen.dart';
 import 'screens/analytics_screen.dart';
+import 'screens/settings_screen.dart';
 import 'widgets/layouts/main_layout.dart';
 import 'utils/constants.dart';
 
@@ -25,11 +26,11 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  runApp(const UVExpressAdminApp());
+  runApp(const GodtrascoAdminApp());
 }
 
-class UVExpressAdminApp extends StatelessWidget {
-  const UVExpressAdminApp({super.key});
+class GodtrascoAdminApp extends StatelessWidget {
+  const GodtrascoAdminApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +166,10 @@ class UVExpressAdminApp extends StatelessWidget {
             GoRoute(
               path: AppConstants.analyticsRoute,
               builder: (context, state) => const AnalyticsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.settingsRoute,
+              builder: (context, state) => const SettingsScreen(),
             ),
           ],
         ),

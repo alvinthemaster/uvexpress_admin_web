@@ -204,6 +204,22 @@ class VanProvider with ChangeNotifier {
     }
   }
 
+  // Complete van trip - mark all bookings as completed and reset occupancy
+  Future<void> completeVanTrip(String id) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _vanService.completeVanTrip(id);
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> progressAllQueues() async {
     try {
       _isLoading = true;

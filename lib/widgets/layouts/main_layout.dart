@@ -70,16 +70,73 @@ class _MainLayoutState extends State<MainLayout> {
                 horizontal: AppConstants.defaultPadding),
             child: Row(
               children: [
-                Icon(
-                  Icons.directions_bus,
-                  color: Theme.of(context).primaryColor,
-                  size: 32,
+                // Use your custom logo instead of the bus icon
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    // Add a subtle border to see the container bounds
+                    border: Border.all(color: Colors.grey.shade300, width: 1),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.asset(
+                      'assets/images/godtrasco_logo.png',
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                        if (frame == null) {
+                          // Show loading indicator while image loads
+                          return Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+                        return child;
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        // Debug: Print error details
+                        print('🚫 Logo loading error: $error');
+                        print('📁 Asset path: assets/images/godtrasco_logo.png');
+                        print('📍 Stack trace: $stackTrace');
+                        
+                        // Fallback to a generic icon if logo fails to load
+                        return Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(
+                            Icons.business,
+                            color: Theme.of(context).primaryColor,
+                            size: 20,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
+
                 if (_isDrawerOpen) ...[
                   const SizedBox(width: AppConstants.smallPadding),
                   Expanded(
                     child: Text(
-                      'UVExpress',
+                      'Godtrasco',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).primaryColor,

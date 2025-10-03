@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 
 class AppConstants {
   // App Information
-  static const String appName = 'UVExpress Admin Panel';
+  static const String appName = 'Godtrasco Admin Panel';
   static const String appVersion = '1.0.0';
 
   // Colors
@@ -123,7 +123,7 @@ class AppConstants {
 
 class AppStrings {
   // General
-  static const String appTitle = 'UVExpress Admin Panel';
+  static const String appTitle = 'Godtrasco Admin Panel';
   static const String loading = 'Loading...';
   static const String error = 'Error';
   static const String success = 'Success';

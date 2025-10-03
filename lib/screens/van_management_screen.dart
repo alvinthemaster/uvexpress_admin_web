@@ -94,6 +94,90 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     }
   }
 
+  // Complete all van trips with occupancy > 0
+  Future<void> _completeAllTrips() async {
+    try {
+      // Show confirmation dialog first
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.flag, color: Colors.green),
+                const SizedBox(width: AppConstants.smallPadding),
+                const Expanded(child: Text('Complete All Trips')),
+              ],
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This will complete trips for all vans with passengers.'),
+                SizedBox(height: AppConstants.smallPadding),
+                Text('• All active bookings will be marked as "Completed"'),
+                Text('• Van occupancies will be reset to 0'),
+                Text('• Van statuses will be updated to "In Queue"'),
+                Text('• Booking history will be preserved'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.flag),
+                label: const Text('Complete All'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completing all trips...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      final vansWithPassengers = vanProvider.vans.where((van) => van.currentOccupancy > 0).toList();
+      
+      int completedCount = 0;
+      for (Van van in vansWithPassengers) {
+        await vanProvider.completeVanTrip(van.id);
+        completedCount++;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Completed trips for $completedCount vans successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing trips: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   // Test queue loop functionality
   Future<void> _testQueueLoop() async {
     try {
@@ -241,6 +325,14 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               label: const Text('Progress All Queues'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.orange,
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _completeAllTrips,
+              icon: const Icon(Icons.flag),
+              label: const Text('Complete All Trips'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
               ),
             ),
             OutlinedButton.icon(
@@ -468,7 +560,7 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 const PopupMenuItem(
-                    value: 'assign_route', child: Text('Assign Route')),
+                    value: 'assign_route', child: Text('Route & Status')),
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                     value: 'move_up', child: Text('Move Up in Queue')),
@@ -492,6 +584,16 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                     ],
                   ),
                 ), // Enhanced reset with options
+                PopupMenuItem(
+                  value: 'trip_complete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.flag, size: 16, color: Colors.green),
+                      const SizedBox(width: 8),
+                      const Text('Trip Complete'),
+                    ],
+                  ),
+                ), // Trip complete option
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                     value: 'maintenance', child: Text('Set Maintenance')),
@@ -558,6 +660,9 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
         break;
       case 'occupancy_reset_full':
         _resetVanOccupancyAndCancelBookings(van);
+        break;
+      case 'trip_complete':
+        _showTripCompleteConfirmation(van);
         break;
       case 'maintenance':
         _showMaintenanceDialog(van);
@@ -789,6 +894,34 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: AppConstants.smallPadding),
+              
+              // Option 3: Trip complete
+              Container(
+                padding: const EdgeInsets.all(AppConstants.smallPadding),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.green.shade200),
+                  borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.flag, color: Colors.green, size: 20),
+                        const SizedBox(width: AppConstants.smallPadding),
+                        const Text('Trip Complete', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Marks all active bookings as "Completed" and resets occupancy. Preserves booking history.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           actions: [
@@ -803,6 +936,17 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Simple Reset'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _handleVanAction('trip_complete', van);
+              },
+              icon: const Icon(Icons.flag),
+              label: const Text('Trip Complete'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+              ),
             ),
             ElevatedButton.icon(
               onPressed: () {
@@ -841,6 +985,114 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error in full reset: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Show trip complete confirmation dialog
+  void _showTripCompleteConfirmation(Van van) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.flag, color: Colors.green),
+              const SizedBox(width: AppConstants.smallPadding),
+              Expanded(child: Text('Complete Trip - ${van.plateNumber}')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current Occupancy: ${van.currentOccupancy}/${van.capacity}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: AppConstants.defaultPadding),
+              Container(
+                padding: const EdgeInsets.all(AppConstants.smallPadding),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  border: Border.all(color: Colors.green.shade200),
+                  borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, size: 16, color: Colors.green.shade700),
+                        const SizedBox(width: 8),
+                        const Text('Trip Complete Action:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('• All active bookings will be marked as "Completed"'),
+                    const Text('• Booking history will be preserved'),
+                    const Text('• Van occupancy will be reset to 0'),
+                    const Text('• Van status will be updated to "In Queue"'),
+                    const Text('• All seats will become available for new bookings'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppConstants.smallPadding),
+              Text(
+                'This action is ideal when a trip has finished successfully and you want to maintain booking records.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _completeVanTrip(van);
+              },
+              icon: const Icon(Icons.flag),
+              label: const Text('Complete Trip'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Complete van trip method
+  Future<void> _completeVanTrip(Van van) async {
+    try {
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      await vanProvider.completeVanTrip(van.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Trip completed for van ${van.plateNumber} - all bookings marked as completed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing trip: $e'),
             backgroundColor: Colors.red,
           ),
         );

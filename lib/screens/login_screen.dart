@@ -129,10 +129,66 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Logo and Title
-                      Icon(
-                        Icons.admin_panel_settings,
-                        size: 64,
-                        color: Theme.of(context).primaryColor,
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/images/godtrasco_logo.png',
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.contain,
+                            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                              if (frame == null) {
+                                // Show loading indicator while image loads
+                                return Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return child;
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to admin panel icon if logo fails to load
+                              print('🚫 Login logo loading error: $error');
+                              return Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.admin_panel_settings,
+                                  size: 48,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
                       Text(
@@ -146,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: AppConstants.smallPadding),
                       Text(
-                        'Admin Access Portal',
+                        'Transportation Management System',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey[600],
                             ),
@@ -357,7 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Footer
                       Text(
-                        '© 2025 UVExpress. All rights reserved.',
+                        '© 2025 Godtrasco. All rights reserved.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.grey[600],
                             ),

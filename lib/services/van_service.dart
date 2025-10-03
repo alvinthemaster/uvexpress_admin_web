@@ -284,6 +284,16 @@ class VanService {
     }
   }
 
+  // Public method to sync van occupancy with actual booking counts
+  Future<void> syncVanOccupancyWithBookings(String vanId) async {
+    try {
+      await _syncVanOccupancyWithBookings(vanId);
+    } catch (e) {
+      print('Error syncing van occupancy: $e');
+      rethrow;
+    }
+  }
+
   // Enhanced reset method that also handles seat reservations/bookings
   Future<void> resetVanOccupancyAndCancelBookings(String vanId) async {
     try {
@@ -303,7 +313,10 @@ class VanService {
         'currentOccupancy': 0,
       });
 
-      // Step 4: Update van status based on new occupancy (will likely become "in_queue")
+      // Step 4: Verify occupancy is in sync with actual bookings
+      await _syncVanOccupancyWithBookings(vanId);
+
+      // Step 5: Update van status based on new occupancy (will likely become "in_queue")
       await _checkAndUpdateVanStatus(vanId);
 
       print('✅ Comprehensive reset completed for van ${van.plateNumber} - all seats are now available');
@@ -322,34 +335,42 @@ class VanService {
 
       print('📋 Searching for active bookings to cancel for van ${van.plateNumber} on route ${van.currentRouteId}');
 
+      if (van.currentRouteId == null || van.currentRouteId!.isEmpty) {
+        print('📋 Van ${van.plateNumber} has no route assigned - no bookings to cancel');
+        return;
+      }
+
       // Query bookings that might be associated with this van
-      // Since bookings don't directly reference vanId, we find them by route and active status
+      // Fix: Use correct field names - bookingStatus instead of status
       QuerySnapshot bookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('status', whereIn: ['confirmed', 'pending'])
+          .where('bookingStatus', whereIn: ['active', 'pending'])
           .get();
 
       WriteBatch batch = _firestore.batch();
       int cancelledCount = 0;
+      int totalSeatsReleased = 0;
 
       for (QueryDocumentSnapshot bookingDoc in bookingsSnapshot.docs) {
-        // Additional filtering can be done here based on schedule/time if needed
-        // For now, we'll cancel all confirmed/pending bookings on the same route
+        Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
+        int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
         
+        // Update booking status to cancelled
         batch.update(bookingDoc.reference, {
-          'status': 'cancelled_by_admin',
+          'bookingStatus': 'cancelled', // Fix: Use correct field name
           'cancellationReason': 'Van occupancy reset by administrator - seats released',
           'cancelledAt': FieldValue.serverTimestamp(),
           'adminCancellation': true,
         });
         
         cancelledCount++;
+        totalSeatsReleased += numberOfSeats;
       }
 
       if (cancelledCount > 0) {
         await batch.commit();
-        print('📋 Cancelled $cancelledCount bookings for van ${van.plateNumber} - all seats are now available');
+        print('📋 Cancelled $cancelledCount bookings for van ${van.plateNumber} - $totalSeatsReleased seats are now available');
       } else {
         print('📋 No active bookings found to cancel for van ${van.plateNumber}');
       }
@@ -369,6 +390,136 @@ class VanService {
       }
     } catch (e) {
       print('Error resetting van occupancy with options: $e');
+      rethrow;
+    }
+  }
+
+  // Complete trip: Mark all active bookings as completed and reset occupancy
+  Future<void> completeVanTrip(String vanId) async {
+    try {
+      print('🏁 Starting trip completion for van $vanId - marking all bookings as completed and resetting occupancy');
+      
+      // Step 1: Get the van details
+      Van? van = await getVanById(vanId);
+      if (van == null) {
+        throw Exception('Van not found');
+      }
+
+      print('🚐 Van ${van.plateNumber}: Current occupancy ${van.currentOccupancy}/${van.capacity}');
+
+      // Step 2: Mark all active bookings for this van as completed
+      await _completeAllBookingsForVan(vanId);
+      
+      // Step 3: Reset van occupancy to 0 (this releases all seats)
+      await _firestore.collection(_collection).doc(vanId).update({
+        'currentOccupancy': 0,
+      });
+
+      print('🔄 Van ${van.plateNumber}: Occupancy reset from ${van.currentOccupancy} to 0');
+
+      // Step 4: Verify occupancy is in sync with actual bookings
+      await _syncVanOccupancyWithBookings(vanId);
+
+      // Step 5: Update van status based on new occupancy (will likely become "in_queue")
+      await _checkAndUpdateVanStatus(vanId);
+
+      print('✅ Trip completion finished for van ${van.plateNumber} - all ${van.currentOccupancy} seats are now available for new bookings');
+    } catch (e) {
+      print('❌ Error completing van trip: $e');
+      rethrow;
+    }
+  }
+
+  // Mark all active bookings for a specific van as completed
+  Future<void> _completeAllBookingsForVan(String vanId) async {
+    try {
+      // Get van details to find associated route
+      Van? van = await getVanById(vanId);
+      if (van == null) return;
+
+      print('📋 Searching for active bookings to mark as completed for van ${van.plateNumber} on route ${van.currentRouteId}');
+
+      if (van.currentRouteId == null || van.currentRouteId!.isEmpty) {
+        print('📋 Van ${van.plateNumber} has no route assigned - no bookings to complete');
+        return;
+      }
+
+      // Query bookings that might be associated with this van
+      // Fix: Use correct field names - bookingStatus instead of status
+      QuerySnapshot bookingsSnapshot = await _firestore
+          .collection('bookings')
+          .where('routeId', isEqualTo: van.currentRouteId)
+          .where('bookingStatus', whereIn: ['active', 'pending'])
+          .get();
+
+      WriteBatch batch = _firestore.batch();
+      int completedCount = 0;
+      int totalSeatsReleased = 0;
+
+      for (QueryDocumentSnapshot bookingDoc in bookingsSnapshot.docs) {
+        Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
+        int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
+        
+        // Mark booking as completed instead of cancelled
+        batch.update(bookingDoc.reference, {
+          'bookingStatus': 'completed', // Fix: Use correct field name
+          'completionReason': 'Trip completed by administrator',
+          'completedAt': FieldValue.serverTimestamp(),
+          'adminCompletion': true,
+        });
+        
+        completedCount++;
+        totalSeatsReleased += numberOfSeats;
+      }
+
+      if (completedCount > 0) {
+        await batch.commit();
+        print('📋 Marked $completedCount bookings as completed for van ${van.plateNumber} - $totalSeatsReleased seats released, trip history preserved');
+      } else {
+        print('📋 No active bookings found to complete for van ${van.plateNumber}');
+      }
+    } catch (e) {
+      print('❌ Error completing bookings for van: $e');
+      rethrow;
+    }
+  }
+
+  // Sync van occupancy with actual active bookings count
+  Future<void> _syncVanOccupancyWithBookings(String vanId) async {
+    try {
+      Van? van = await getVanById(vanId);
+      if (van == null) return;
+
+      if (van.currentRouteId == null || van.currentRouteId!.isEmpty) {
+        print('🔄 Van ${van.plateNumber} has no route - setting occupancy to 0');
+        await _firestore.collection(_collection).doc(vanId).update({'currentOccupancy': 0});
+        return;
+      }
+
+      // Count actual active bookings for this van's route
+      QuerySnapshot activeBookingsSnapshot = await _firestore
+          .collection('bookings')
+          .where('routeId', isEqualTo: van.currentRouteId)
+          .where('bookingStatus', whereIn: ['active', 'pending'])
+          .get();
+
+      int actualOccupancy = 0;
+      for (QueryDocumentSnapshot doc in activeBookingsSnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        actualOccupancy += (data['numberOfSeats'] ?? 0) as int;
+      }
+
+      // Update van occupancy if it doesn't match
+      if (actualOccupancy != van.currentOccupancy) {
+        print('🔄 Syncing van ${van.plateNumber}: Recorded occupancy ${van.currentOccupancy} -> Actual occupancy $actualOccupancy');
+        await _firestore.collection(_collection).doc(vanId).update({
+          'currentOccupancy': actualOccupancy,
+        });
+      } else {
+        print('✅ Van ${van.plateNumber} occupancy is in sync: $actualOccupancy seats');
+      }
+    } catch (e) {
+      print('❌ Error syncing van occupancy with bookings: $e');
       rethrow;
     }
   }
