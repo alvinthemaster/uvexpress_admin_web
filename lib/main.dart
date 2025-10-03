@@ -8,25 +8,23 @@ import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/van_provider.dart';
 import 'providers/booking_provider.dart';
-import 'providers/discount_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/van_management_screen.dart';
 import 'screens/booking_management_screen.dart';
 import 'screens/route_management_screen.dart';
-import 'screens/discount_management_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'widgets/layouts/main_layout.dart';
 import 'utils/constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   runApp(const UVExpressAdminApp());
 }
 
@@ -40,7 +38,6 @@ class UVExpressAdminApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => VanProvider()),
         ChangeNotifierProvider(create: (_) => BookingProvider()),
-        ChangeNotifierProvider(create: (_) => DiscountProvider()),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
@@ -85,7 +82,8 @@ class UVExpressAdminApp extends StatelessWidget {
           backgroundColor: const Color(AppConstants.primaryColorValue),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            borderRadius:
+                BorderRadius.circular(AppConstants.defaultBorderRadius),
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: AppConstants.defaultPadding,
@@ -96,7 +94,8 @@ class UVExpressAdminApp extends StatelessWidget {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            borderRadius:
+                BorderRadius.circular(AppConstants.defaultBorderRadius),
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: AppConstants.defaultPadding,
@@ -162,10 +161,6 @@ class UVExpressAdminApp extends StatelessWidget {
             GoRoute(
               path: AppConstants.routesRoute,
               builder: (context, state) => const RouteManagementScreen(),
-            ),
-            GoRoute(
-              path: AppConstants.discountsRoute,
-              builder: (context, state) => const DiscountManagementScreen(),
             ),
             GoRoute(
               path: AppConstants.analyticsRoute,

@@ -27,8 +27,8 @@ class RevenueChartCard extends StatelessWidget {
                   child: Text(
                     'Revenue Overview',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ),
                 Consumer<BookingProvider>(
@@ -36,9 +36,9 @@ class RevenueChartCard extends StatelessWidget {
                     return Text(
                       AppHelpers.formatCurrency(bookingProvider.totalRevenue),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
                     );
                   },
                 ),
@@ -84,15 +84,18 @@ class RevenueChartCard extends StatelessWidget {
     );
   }
 
-  Future<Map<String, double>> _getRevenueData(BookingProvider bookingProvider) async {
+  Future<Map<String, double>> _getRevenueData(
+      BookingProvider bookingProvider) async {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
     final endOfWeek = startOfWeek.add(const Duration(days: 6));
-    
-    return await bookingProvider.getRevenueByPaymentMethod(startOfWeek, endOfWeek);
+
+    return await bookingProvider.getRevenueByPaymentMethod(
+        startOfWeek, endOfWeek);
   }
 
-  List<PieChartSectionData> _buildPieChartSections(Map<String, double> data, BuildContext context) {
+  List<PieChartSectionData> _buildPieChartSections(
+      Map<String, double> data, BuildContext context) {
     final total = data.values.fold(0.0, (sum, value) => sum + value);
     final colors = [
       Theme.of(context).primaryColor,
@@ -101,13 +104,13 @@ class RevenueChartCard extends StatelessWidget {
       Colors.purple,
       Colors.red,
     ];
-    
+
     int index = 0;
     return data.entries.map((entry) {
       final percentage = total > 0 ? (entry.value / total) * 100 : 0;
       final color = colors[index % colors.length];
       index++;
-      
+
       return PieChartSectionData(
         value: entry.value,
         title: '${percentage.toStringAsFixed(1)}%',
@@ -140,7 +143,7 @@ class RevenueChartCard extends StatelessWidget {
               Colors.purple,
               Colors.red,
             ];
-            
+
             int index = 0;
             return Wrap(
               spacing: AppConstants.defaultPadding,
@@ -148,7 +151,7 @@ class RevenueChartCard extends StatelessWidget {
               children: data.entries.map((entry) {
                 final color = colors[index % colors.length];
                 index++;
-                
+
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

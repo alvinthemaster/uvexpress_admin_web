@@ -88,8 +88,10 @@ class Booking {
       routeName: data['routeName'] ?? '',
       origin: data['origin'] ?? '',
       destination: data['destination'] ?? '',
-      departureTime: (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      bookingDate: (data['bookingDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      departureTime:
+          (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      bookingDate:
+          (data['bookingDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       seatIds: List<String>.from(data['seatIds'] ?? []),
       numberOfSeats: data['numberOfSeats'] ?? 0,
       basePrice: (data['basePrice'] ?? 0).toDouble(),
@@ -100,7 +102,8 @@ class Booking {
       bookingStatus: data['bookingStatus'] ?? 'active',
       qrCodeData: data['qrCodeData'],
       eTicketId: data['eTicketId'],
-      passengerDetails: PassengerDetails.fromMap(data['passengerDetails'] ?? {}),
+      passengerDetails:
+          PassengerDetails.fromMap(data['passengerDetails'] ?? {}),
       discountApplied: data['discountApplied'],
     );
   }

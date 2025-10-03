@@ -7,7 +7,7 @@ import '../services/van_service.dart';
 class BookingProvider with ChangeNotifier {
   final BookingService _bookingService = BookingService();
   final VanService _vanService = VanService();
-  
+
   List<Booking> _bookings = [];
   List<Booking> _todayBookings = [];
   List<Booking> _activeBookings = [];
@@ -15,7 +15,7 @@ class BookingProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic> _statistics = {};
-  
+
   List<Booking> get bookings => _bookings;
   List<Booking> get todayBookings => _todayBookings;
   List<Booking> get activeBookings => _activeBookings;
@@ -106,7 +106,8 @@ class BookingProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _statistics = await _bookingService.getBookingStatistics(startDate, endDate);
+      _statistics =
+          await _bookingService.getBookingStatistics(startDate, endDate);
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -115,9 +116,11 @@ class BookingProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, double>> getRevenueByPaymentMethod(DateTime startDate, DateTime endDate) async {
+  Future<Map<String, double>> getRevenueByPaymentMethod(
+      DateTime startDate, DateTime endDate) async {
     try {
-      return await _bookingService.getRevenueByPaymentMethod(startDate, endDate);
+      return await _bookingService.getRevenueByPaymentMethod(
+          startDate, endDate);
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
@@ -149,39 +152,72 @@ class BookingProvider with ChangeNotifier {
   }
 
   List<Booking> getBookingsByStatus(String status) {
-    return _bookings.where((booking) => booking.bookingStatus == status).toList();
+    return _bookings
+        .where((booking) => booking.bookingStatus == status)
+        .toList();
   }
 
   List<Booking> getBookingsByPaymentStatus(String paymentStatus) {
-    return _bookings.where((booking) => booking.paymentStatus == paymentStatus).toList();
+    return _bookings
+        .where((booking) => booking.paymentStatus == paymentStatus)
+        .toList();
   }
 
   List<Booking> searchBookings(String query) {
-    return _bookings.where((booking) => 
-        booking.userName.toLowerCase().contains(query.toLowerCase()) ||
-        booking.userEmail.toLowerCase().contains(query.toLowerCase()) ||
-        booking.routeName.toLowerCase().contains(query.toLowerCase()) ||
-        (booking.eTicketId?.toLowerCase().contains(query.toLowerCase()) ?? false)
-    ).toList();
+    return _bookings
+        .where((booking) =>
+            booking.userName.toLowerCase().contains(query.toLowerCase()) ||
+            booking.userEmail.toLowerCase().contains(query.toLowerCase()) ||
+            booking.routeName.toLowerCase().contains(query.toLowerCase()) ||
+            (booking.eTicketId?.toLowerCase().contains(query.toLowerCase()) ??
+                false))
+        .toList();
   }
 
   List<Booking> getBookingsByDateRange(DateTime startDate, DateTime endDate) {
-    return _bookings.where((booking) => 
-        booking.bookingDate.isAfter(startDate.subtract(const Duration(days: 1))) &&
-        booking.bookingDate.isBefore(endDate.add(const Duration(days: 1)))
-    ).toList();
+    return _bookings
+        .where((booking) =>
+            booking.bookingDate
+                .isAfter(startDate.subtract(const Duration(days: 1))) &&
+            booking.bookingDate.isBefore(endDate.add(const Duration(days: 1))))
+        .toList();
   }
 
   // Quick statistics getters
   int get totalBookings => _bookings.length;
   int get todayBookingsCount => _todayBookings.length;
   int get activeBookingsCount => _activeBookings.length;
-  int get pendingPaymentsCount => _bookings.where((b) => b.paymentStatus == 'pending').length;
-  
+  int get pendingPaymentsCount =>
+      _bookings.where((b) => b.paymentStatus == 'pending').length;
+
+  // User account statistics
+  int get totalUserAccounts {
+    Set<String> uniqueUserIds = {};
+    for (Booking booking in _bookings) {
+      if (booking.userId.isNotEmpty) {
+        uniqueUserIds.add(booking.userId);
+      }
+    }
+    return uniqueUserIds.length;
+  }
+
+  int get todayNewUsers {
+    DateTime today = DateTime.now();
+    DateTime startOfToday = DateTime(today.year, today.month, today.day);
+    
+    Set<String> todayUserIds = {};
+    for (Booking booking in _todayBookings) {
+      if (booking.userId.isNotEmpty && booking.bookingDate.isAfter(startOfToday)) {
+        todayUserIds.add(booking.userId);
+      }
+    }
+    return todayUserIds.length;
+  }
+
   double get todayRevenue => _todayBookings
       .where((b) => b.paymentStatus == 'paid')
       .fold(0.0, (sum, booking) => sum + booking.totalAmount);
-      
+
   double get totalRevenue => _bookings
       .where((b) => b.paymentStatus == 'paid')
       .fold(0.0, (sum, booking) => sum + booking.totalAmount);
@@ -191,10 +227,9 @@ class BookingProvider with ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      
+
       // The vans are already loaded through the stream in _initializeStreams
       // This method is kept for mobile app compatibility
-      
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -206,15 +241,15 @@ class BookingProvider with ChangeNotifier {
   Future<void> initializeSampleVans() async {
     try {
       print('Starting initializeSampleVans...');
-      
+
       // Generate unique IDs with timestamp to avoid duplicates
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      
+
       // Create sample vans with exact mobile app status values
       final sampleVans = [
         Van(
           id: 'TEST1_$timestamp',
-          plateNumber: 'TEST1', 
+          plateNumber: 'TEST1',
           capacity: 18,
           driver: Driver(
             id: 'driver_test1_$timestamp',
@@ -222,7 +257,7 @@ class BookingProvider with ChangeNotifier {
             license: 'N03-12-123456',
             contact: '09123456789',
           ),
-          status: 'boarding',  // Mobile app expected status
+          status: 'boarding', // Mobile app expected status
           queuePosition: 1,
           isActive: true,
           createdAt: DateTime.now(),
@@ -238,7 +273,7 @@ class BookingProvider with ChangeNotifier {
             license: 'N03-12-123457',
             contact: '09123456790',
           ),
-          status: 'in_queue',  // Mobile app expected status
+          status: 'in_queue', // Mobile app expected status
           queuePosition: 2,
           isActive: true,
           createdAt: DateTime.now(),
@@ -258,9 +293,8 @@ class BookingProvider with ChangeNotifier {
           print('Error adding van ${van.plateNumber}: $vanError');
         }
       }
-      
+
       print('Sample vans initialization completed');
-      
     } catch (e) {
       print('Error initializing sample vans: $e');
       rethrow; // Re-throw so the UI can handle the error

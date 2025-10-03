@@ -27,8 +27,8 @@ class VanQueueCard extends StatelessWidget {
                   child: Text(
                     'Van Queue Status',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ),
                 TextButton(
@@ -43,7 +43,7 @@ class VanQueueCard extends StatelessWidget {
             Consumer<VanProvider>(
               builder: (context, vanProvider, _) {
                 final activeVans = vanProvider.activeVans.take(6).toList();
-                
+
                 if (activeVans.isEmpty) {
                   return const Center(
                     child: Padding(
@@ -52,10 +52,12 @@ class VanQueueCard extends StatelessWidget {
                     ),
                   );
                 }
-                
+
                 return Column(
                   children: [
-                    ...activeVans.map((van) => _buildVanQueueItem(context, van)).toList(),
+                    ...activeVans
+                        .map((van) => _buildVanQueueItem(context, van))
+                        .toList(),
                     if (vanProvider.activeVans.length > 6) ...[
                       const SizedBox(height: AppConstants.smallPadding),
                       Text(
@@ -84,12 +86,12 @@ class VanQueueCard extends StatelessWidget {
         vertical: AppConstants.smallPadding,
       ),
       decoration: BoxDecoration(
-        color: van.queuePosition <= 3 
+        color: van.queuePosition <= 3
             ? Theme.of(context).primaryColor.withOpacity(0.1)
             : Colors.grey[50],
         borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
         border: Border.all(
-          color: van.queuePosition <= 3 
+          color: van.queuePosition <= 3
               ? Theme.of(context).primaryColor.withOpacity(0.3)
               : Colors.grey[300]!,
         ),
@@ -100,7 +102,7 @@ class VanQueueCard extends StatelessWidget {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: van.queuePosition <= 3 
+              color: van.queuePosition <= 3
                   ? Theme.of(context).primaryColor
                   : Colors.grey[400],
               shape: BoxShape.circle,

@@ -11,7 +11,8 @@ class RouteService {
         .collection(_collection)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
   }
 
   // Get active routes stream
@@ -21,13 +22,15 @@ class RouteService {
         .where('isActive', isEqualTo: true)
         .orderBy('name')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
   }
 
   // Get route by ID
   Future<Route?> getRouteById(String id) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection(_collection).doc(id).get();
+      DocumentSnapshot doc =
+          await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
         return Route.fromFirestore(doc);
       }
@@ -90,7 +93,8 @@ class RouteService {
         .where('name', isGreaterThanOrEqualTo: query)
         .where('name', isLessThan: query + 'z')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Route.fromFirestore(doc)).toList());
   }
 
   // Get routes by origin/destination
@@ -101,9 +105,11 @@ class RouteService {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => Route.fromFirestore(doc))
-            .where((route) => 
+            .where((route) =>
                 route.origin.toLowerCase().contains(location.toLowerCase()) ||
-                route.destination.toLowerCase().contains(location.toLowerCase()))
+                route.destination
+                    .toLowerCase()
+                    .contains(location.toLowerCase()))
             .toList());
   }
 }

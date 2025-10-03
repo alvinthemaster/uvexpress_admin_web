@@ -27,7 +27,8 @@ class Schedule {
       id: doc.id,
       routeId: data['routeId'] ?? '',
       vanId: data['vanId'] ?? '',
-      departureTime: (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      departureTime:
+          (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
       arrivalEstimate: (data['arrivalEstimate'] as Timestamp?)?.toDate(),
       availableSeats: data['availableSeats'] ?? 0,
       seatIds: List<String>.from(data['seatIds'] ?? []),
@@ -40,7 +41,8 @@ class Schedule {
       'routeId': routeId,
       'vanId': vanId,
       'departureTime': Timestamp.fromDate(departureTime),
-      'arrivalEstimate': arrivalEstimate != null ? Timestamp.fromDate(arrivalEstimate!) : null,
+      'arrivalEstimate':
+          arrivalEstimate != null ? Timestamp.fromDate(arrivalEstimate!) : null,
       'availableSeats': availableSeats,
       'seatIds': seatIds,
       'status': status,

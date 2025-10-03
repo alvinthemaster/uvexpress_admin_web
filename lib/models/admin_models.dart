@@ -23,7 +23,7 @@ class AdminUser {
 
   factory AdminUser.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    
+
     // Handle permissions array safely
     List<String> permissions = [];
     if (data['permissions'] != null) {
@@ -35,11 +35,10 @@ class AdminUser {
         if (permString.startsWith('[') && permString.endsWith(']')) {
           // Try to parse as JSON array
           try {
-            permissions = List<String>.from(
-              permString.substring(1, permString.length - 1)
-                  .split(',')
-                  .map((s) => s.trim().replaceAll('"', ''))
-            );
+            permissions = List<String>.from(permString
+                .substring(1, permString.length - 1)
+                .split(',')
+                .map((s) => s.trim().replaceAll('"', '')));
           } catch (e) {
             permissions = ['all']; // Default fallback
           }

@@ -49,7 +49,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '774845116609',
     projectId: 'e-ticket-2e8d0',
     authDomain: 'e-ticket-2e8d0.firebaseapp.com',
-    databaseURL: 'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'e-ticket-2e8d0.firebasestorage.app',
   );
 
@@ -59,7 +60,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '774845116609',
     projectId: 'e-ticket-2e8d0',
     authDomain: 'e-ticket-2e8d0.firebaseapp.com',
-    databaseURL: 'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'e-ticket-2e8d0.firebasestorage.app',
   );
 
@@ -69,7 +71,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '774845116609',
     projectId: 'e-ticket-2e8d0',
     authDomain: 'e-ticket-2e8d0.firebaseapp.com',
-    databaseURL: 'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'e-ticket-2e8d0.firebasestorage.app',
   );
 
@@ -79,7 +82,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '774845116609',
     projectId: 'e-ticket-2e8d0',
     authDomain: 'e-ticket-2e8d0.firebaseapp.com',
-    databaseURL: 'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://e-ticket-2e8d0-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'e-ticket-2e8d0.firebasestorage.app',
   );
 }

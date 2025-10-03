@@ -11,17 +11,18 @@ Future<void> main() async {
   );
 
   print('Creating admin account...');
-  
+
   try {
     // Create the admin user in Firebase Auth
-    UserCredential result = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+    UserCredential result =
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
       email: 'admin@uvexpress.com',
       password: 'admin123',
     );
 
     if (result.user != null) {
       print('Firebase Auth user created successfully!');
-      
+
       // Create admin user document in Firestore
       AdminUser adminUser = AdminUser(
         id: result.user!.uid,
@@ -53,7 +54,6 @@ Future<void> main() async {
       print('🔐 Password: admin123');
       print('👤 Role: super_admin');
       print('🔑 Permissions: All permissions granted');
-      
     } else {
       print('❌ Failed to create Firebase Auth user');
     }
@@ -67,6 +67,6 @@ Future<void> main() async {
       print('❌ Error creating admin account: $e');
     }
   }
-  
+
   print('\nScript completed. You can now close this and use the web app.');
 }

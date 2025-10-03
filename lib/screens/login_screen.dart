@@ -29,7 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void _signIn() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signIn(_emailController.text.trim(), _passwordController.text);
+      await authProvider.signIn(
+          _emailController.text.trim(), _passwordController.text);
     }
   }
 
@@ -46,9 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     await authProvider.resetPassword(_emailController.text.trim());
-    
+
     if (!mounted) return;
-    
+
     if (authProvider.errorMessage == null) {
       _showSuccessDialog('Password reset email sent. Please check your inbox.');
     }
@@ -56,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _createAdminAccount() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     try {
       String result = await authProvider.createInitialAdmin();
       if (!mounted) return;
@@ -136,18 +137,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: AppConstants.defaultPadding),
                       Text(
                         AppStrings.appTitle,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).primaryColor,
+                                ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppConstants.smallPadding),
                       Text(
                         'Admin Access Portal',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                              color: Colors.grey[600],
+                            ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppConstants.largePadding),
@@ -203,7 +205,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (value == null || value.isEmpty) {
                                   return AppStrings.fieldRequired;
                                 }
-                                if (value.length < AppConstants.minPasswordLength) {
+                                if (value.length <
+                                    AppConstants.minPasswordLength) {
                                   return AppStrings.passwordTooShort;
                                 }
                                 return null;
@@ -239,17 +242,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (authProvider.errorMessage != null) {
                                   return Container(
                                     width: double.infinity,
-                                    padding: const EdgeInsets.all(AppConstants.smallPadding),
-                                    margin: const EdgeInsets.only(bottom: AppConstants.defaultPadding),
+                                    padding: const EdgeInsets.all(
+                                        AppConstants.smallPadding),
+                                    margin: const EdgeInsets.only(
+                                        bottom: AppConstants.defaultPadding),
                                     decoration: BoxDecoration(
                                       color: Colors.red[50],
-                                      border: Border.all(color: Colors.red[300]!),
-                                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                                      border:
+                                          Border.all(color: Colors.red[300]!),
+                                      borderRadius: BorderRadius.circular(
+                                          AppConstants.defaultBorderRadius),
                                     ),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.error_outline, color: Colors.red[700], size: 20),
-                                        const SizedBox(width: AppConstants.smallPadding),
+                                        Icon(Icons.error_outline,
+                                            color: Colors.red[700], size: 20),
+                                        const SizedBox(
+                                            width: AppConstants.smallPadding),
                                         Expanded(
                                           child: Text(
                                             authProvider.errorMessage!,
@@ -260,7 +269,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.close, size: 16),
+                                          icon:
+                                              const Icon(Icons.close, size: 16),
                                           color: Colors.red[700],
                                           onPressed: authProvider.clearError,
                                           constraints: const BoxConstraints(),
@@ -280,9 +290,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
-                                    onPressed: authProvider.isLoading ? null : _signIn,
+                                    onPressed:
+                                        authProvider.isLoading ? null : _signIn,
                                     style: ElevatedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: AppConstants.defaultPadding),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical:
+                                              AppConstants.defaultPadding),
                                     ),
                                     child: authProvider.isLoading
                                         ? const SizedBox(
@@ -290,12 +303,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                             width: 20,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                      Colors.white),
                                             ),
                                           )
                                         : const Text(
                                             AppStrings.signIn,
-                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                            style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500),
                                           ),
                                   ),
                                 );
@@ -313,10 +330,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: AppConstants.defaultPadding),
                         Text(
                           'Development Only',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.orange[700],
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.orange[700],
+                                    fontWeight: FontWeight.bold,
+                                  ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: AppConstants.smallPadding),
@@ -329,7 +347,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.orange[700],
                               side: BorderSide(color: Colors.orange[300]!),
-                              padding: const EdgeInsets.symmetric(vertical: AppConstants.defaultPadding),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: AppConstants.defaultPadding),
                             ),
                           ),
                         ),
@@ -340,8 +359,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         '© 2025 UVExpress. All rights reserved.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                              color: Colors.grey[600],
+                            ),
                         textAlign: TextAlign.center,
                       ),
                     ],

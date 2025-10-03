@@ -66,38 +66,42 @@ class Van {
   // Comprehensive status mapping for admin-mobile compatibility
   String get statusDisplay {
     // Debug: Print the actual status value
-    print('Van ${plateNumber} has status: "$status" (length: ${status.length})');
-    
+    print(
+        'Van ${plateNumber} has status: "$status" (length: ${status.length})');
+
     // Normalize the status for comparison (handle case, spaces, etc.)
     final normalizedStatus = status.toLowerCase().trim();
-    
+
     // Use the status mapping from constants
     if (VanStatus.statusDisplayMap.containsKey(normalizedStatus)) {
       final displayValue = VanStatus.statusDisplayMap[normalizedStatus]!;
       print('Status "$normalizedStatus" mapped to: "$displayValue"');
       return displayValue;
     }
-    
+
     // Handle empty or null status
     if (normalizedStatus.isEmpty || normalizedStatus == 'null') {
-      print('Warning: Empty status for van ${plateNumber}, defaulting to Ready');
+      print(
+          'Warning: Empty status for van ${plateNumber}, defaulting to Ready');
       return 'Ready';
     }
-    
+
     // Fallback: format the original status
-    print('⚠️ Unknown status: "$status" (normalized: "$normalizedStatus") for van ${plateNumber}');
+    print(
+        '⚠️ Unknown status: "$status" (normalized: "$normalizedStatus") for van ${plateNumber}');
     if (status.isNotEmpty) {
-      final formatted = status[0].toUpperCase() + status.substring(1).toLowerCase();
+      final formatted =
+          status[0].toUpperCase() + status.substring(1).toLowerCase();
       print('Returning formatted status: "$formatted"');
       return formatted;
     }
-    
+
     return 'Unknown';
   }
 
   Color get statusColor {
     final normalizedStatus = status.toLowerCase().trim();
-    
+
     switch (normalizedStatus) {
       // Ready/Active states - Green
       case 'in_queue':
@@ -107,12 +111,12 @@ class Van {
       case 'ready':
       case 'available':
         return const Color(0xFF4CAF50); // Green
-        
+
       // Boarding/Loading states - Blue
       case 'boarding':
       case 'loading':
-        return const Color(0xFF2196F3); // Blue
-        
+        return const Color.fromRGBO(68, 243, 33, 1); // Blue
+
       // Transit states - Purple
       case 'in_transit':
       case 'in-transit':
@@ -120,25 +124,25 @@ class Van {
       case 'traveling':
       case 'departing':
         return const Color(0xFF9C27B0); // Purple
-        
+
       // Maintenance states - Orange
       case 'maintenance':
       case 'under_maintenance':
       case 'under-maintenance':
         return const Color(0xFFFF9800); // Orange
-        
+
       // Inactive states - Grey
       case 'inactive':
       case 'offline':
       case 'disabled':
         return const Color(0xFF9E9E9E); // Grey
-        
+
       // Busy states - Red
       case 'busy':
       case 'occupied':
       case 'full':
         return const Color(0xFFF44336); // Red
-        
+
       default:
         return const Color(0xFF757575); // Default grey
     }
@@ -146,9 +150,9 @@ class Van {
 
   bool get canBook {
     final normalizedStatus = status.toLowerCase().trim();
-    return isActive && 
-           VanStatus.bookableStatuses.contains(normalizedStatus) && 
-           currentOccupancy < capacity;
+    return isActive &&
+        VanStatus.bookableStatuses.contains(normalizedStatus) &&
+        currentOccupancy < capacity;
   }
 
   factory Van.fromFirestore(DocumentSnapshot doc) {
@@ -177,8 +181,10 @@ class Van {
       'status': status,
       'currentRouteId': currentRouteId,
       'queuePosition': queuePosition,
-      'lastMaintenance': lastMaintenance != null ? Timestamp.fromDate(lastMaintenance!) : null,
-      'nextMaintenance': nextMaintenance != null ? Timestamp.fromDate(nextMaintenance!) : null,
+      'lastMaintenance':
+          lastMaintenance != null ? Timestamp.fromDate(lastMaintenance!) : null,
+      'nextMaintenance':
+          nextMaintenance != null ? Timestamp.fromDate(nextMaintenance!) : null,
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
       'currentOccupancy': currentOccupancy,

@@ -137,6 +137,12 @@ class AppHelpers {
         return 'Maintenance';
       case 'in_transit':
         return 'In Transit';
+      case 'boarding':
+        return 'Boarding';
+      case 'in_queue':
+        return 'Ready';
+      case 'full':
+        return 'Full'; // Add full status formatting
       default:
         return capitalizeFirst(status);
     }
@@ -148,7 +154,8 @@ class AppHelpers {
   }
 
   static bool isValidPhoneNumber(String phone) {
-    return RegExp(r'^[\+]?[0-9]{10,15}$').hasMatch(phone.replaceAll(RegExp(r'[\s\-\(\)]'), ''));
+    return RegExp(r'^[\+]?[0-9]{10,15}$')
+        .hasMatch(phone.replaceAll(RegExp(r'[\s\-\(\)]'), ''));
   }
 
   static bool isValidPlateNumber(String plateNumber) {
@@ -193,9 +200,10 @@ class AppHelpers {
     return text.toLowerCase().contains(query.toLowerCase());
   }
 
-  static List<T> filterList<T>(List<T> list, String query, List<String> Function(T) getSearchFields) {
+  static List<T> filterList<T>(
+      List<T> list, String query, List<String> Function(T) getSearchFields) {
     if (query.isEmpty) return list;
-    
+
     return list.where((item) {
       return getSearchFields(item).any((field) => matchesSearch(field, query));
     }).toList();
@@ -222,19 +230,22 @@ class AppHelpers {
     return '$origin → $destination';
   }
 
-  static double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+  static double calculateDistance(
+      double lat1, double lon1, double lat2, double lon2) {
     // Haversine formula for calculating distance between two points
     const double earthRadius = 6371; // km
-    
+
     double dLat = _toRadians(lat2 - lat1);
     double dLon = _toRadians(lon2 - lon1);
-    
+
     double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) * 
-        math.sin(dLon / 2) * math.sin(dLon / 2);
-    
+        math.cos(_toRadians(lat1)) *
+            math.cos(_toRadians(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+
     double c = 2 * math.asin(math.sqrt(a));
-    
+
     return earthRadius * c;
   }
 
@@ -251,7 +262,9 @@ class AppHelpers {
 
   static String generateETicketId() {
     final now = DateTime.now();
-    final random = (DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0');
+    final random = (DateTime.now().millisecondsSinceEpoch % 100000)
+        .toString()
+        .padLeft(5, '0');
     return 'ET-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$random';
   }
 

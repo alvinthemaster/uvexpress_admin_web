@@ -4,14 +4,14 @@ import '../services/discount_service.dart';
 
 class DiscountProvider with ChangeNotifier {
   final DiscountService _discountService = DiscountService();
-  
+
   List<Discount> _discounts = [];
   List<Discount> _activeDiscounts = [];
   List<Discount> _expiringDiscounts = [];
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic> _statistics = {};
-  
+
   List<Discount> get discounts => _discounts;
   List<Discount> get activeDiscounts => _activeDiscounts;
   List<Discount> get expiringDiscounts => _expiringDiscounts;
@@ -102,7 +102,8 @@ class DiscountProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _statistics = await _discountService.getDiscountStatistics(startDate, endDate);
+      _statistics =
+          await _discountService.getDiscountStatistics(startDate, endDate);
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -147,31 +148,34 @@ class DiscountProvider with ChangeNotifier {
   }
 
   List<Discount> getDiscountsByEligibility(String eligibility) {
-    return _discounts.where((discount) => 
-        discount.eligibility.contains(eligibility) || 
-        discount.eligibility.contains('all')
-    ).toList();
+    return _discounts
+        .where((discount) =>
+            discount.eligibility.contains(eligibility) ||
+            discount.eligibility.contains('all'))
+        .toList();
   }
 
   List<Discount> searchDiscounts(String query) {
-    return _discounts.where((discount) => 
-        discount.name.toLowerCase().contains(query.toLowerCase()) ||
-        discount.description.toLowerCase().contains(query.toLowerCase())
-    ).toList();
+    return _discounts
+        .where((discount) =>
+            discount.name.toLowerCase().contains(query.toLowerCase()) ||
+            discount.description.toLowerCase().contains(query.toLowerCase()))
+        .toList();
   }
 
   List<Discount> getNearLimitDiscounts() {
-    return _discounts.where((discount) => 
-        discount.isActive && 
-        discount.maxUsage > 0 && 
-        discount.currentUsage >= (discount.maxUsage * 0.9)
-    ).toList();
+    return _discounts
+        .where((discount) =>
+            discount.isActive &&
+            discount.maxUsage > 0 &&
+            discount.currentUsage >= (discount.maxUsage * 0.9))
+        .toList();
   }
 
   List<Discount> getExpiredDiscounts() {
-    return _discounts.where((discount) => 
-        discount.validTo.isBefore(DateTime.now())
-    ).toList();
+    return _discounts
+        .where((discount) => discount.validTo.isBefore(DateTime.now()))
+        .toList();
   }
 
   // Quick statistics getters
@@ -180,10 +184,14 @@ class DiscountProvider with ChangeNotifier {
   int get expiringDiscountsCount => _expiringDiscounts.length;
   int get nearLimitDiscountsCount => getNearLimitDiscounts().length;
   int get expiredDiscountsCount => getExpiredDiscounts().length;
-  
-  double get totalDiscountValue => _discounts
-      .fold(0.0, (sum, discount) => sum + (discount.currentUsage * 
-          (discount.type == 'percentage' ? 0 : discount.value)));
-          
-  int get totalUsage => _discounts.fold(0, (sum, discount) => sum + discount.currentUsage);
+
+  double get totalDiscountValue => _discounts.fold(
+      0.0,
+      (sum, discount) =>
+          sum +
+          (discount.currentUsage *
+              (discount.type == 'percentage' ? 0 : discount.value)));
+
+  int get totalUsage =>
+      _discounts.fold(0, (sum, discount) => sum + discount.currentUsage);
 }

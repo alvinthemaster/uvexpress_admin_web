@@ -11,7 +11,8 @@ class DiscountService {
         .collection(_collection)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
   }
 
   // Get active discounts stream
@@ -22,13 +23,15 @@ class DiscountService {
         .where('validTo', isGreaterThan: DateTime.now())
         .orderBy('validTo')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
   }
 
   // Get discount by ID
   Future<Discount?> getDiscountById(String id) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection(_collection).doc(id).get();
+      DocumentSnapshot doc =
+          await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
         return Discount.fromFirestore(doc);
       }
@@ -52,7 +55,10 @@ class DiscountService {
   // Update discount
   Future<void> updateDiscount(String id, Discount discount) async {
     try {
-      await _firestore.collection(_collection).doc(id).update(discount.toFirestore());
+      await _firestore
+          .collection(_collection)
+          .doc(id)
+          .update(discount.toFirestore());
     } catch (e) {
       print('Error updating discount: $e');
       rethrow;
@@ -100,7 +106,8 @@ class DiscountService {
         .where('eligibility', arrayContains: eligibilityType)
         .where('isActive', isEqualTo: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
   }
 
   // Get discounts applicable to a route
@@ -111,8 +118,8 @@ class DiscountService {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => Discount.fromFirestore(doc))
-            .where((discount) => 
-                discount.applicableRoutes.contains('all') || 
+            .where((discount) =>
+                discount.applicableRoutes.contains('all') ||
                 discount.applicableRoutes.contains(routeId))
             .toList());
   }
@@ -120,7 +127,7 @@ class DiscountService {
   // Get expiring discounts (within next 7 days)
   Stream<List<Discount>> getExpiringDiscounts() {
     DateTime nextWeek = DateTime.now().add(const Duration(days: 7));
-    
+
     return _firestore
         .collection(_collection)
         .where('isActive', isEqualTo: true)
@@ -128,24 +135,32 @@ class DiscountService {
         .where('validTo', isGreaterThan: DateTime.now())
         .orderBy('validTo')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
   }
 
   // Get discount usage statistics
-  Future<Map<String, dynamic>> getDiscountStatistics(DateTime startDate, DateTime endDate) async {
+  Future<Map<String, dynamic>> getDiscountStatistics(
+      DateTime startDate, DateTime endDate) async {
     try {
       QuerySnapshot snapshot = await _firestore.collection(_collection).get();
-      List<Discount> discounts = snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList();
+      List<Discount> discounts =
+          snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList();
 
       int totalDiscounts = discounts.length;
       int activeDiscounts = discounts.where((d) => d.isActive).length;
-      int expiredDiscounts = discounts.where((d) => d.validTo.isBefore(DateTime.now())).length;
-      
-      double totalDiscountValue = discounts
-          .fold(0.0, (sum, discount) => sum + (discount.currentUsage * 
-              (discount.type == 'percentage' ? 0 : discount.value)));
+      int expiredDiscounts =
+          discounts.where((d) => d.validTo.isBefore(DateTime.now())).length;
 
-      int totalUsage = discounts.fold(0, (sum, discount) => sum + discount.currentUsage);
+      double totalDiscountValue = discounts.fold(
+          0.0,
+          (sum, discount) =>
+              sum +
+              (discount.currentUsage *
+                  (discount.type == 'percentage' ? 0 : discount.value)));
+
+      int totalUsage =
+          discounts.fold(0, (sum, discount) => sum + discount.currentUsage);
 
       return {
         'totalDiscounts': totalDiscounts,
@@ -167,7 +182,8 @@ class DiscountService {
         .where('name', isGreaterThanOrEqualTo: query)
         .where('name', isLessThan: query + 'z')
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Discount.fromFirestore(doc)).toList());
   }
 
   // Get near-limit discounts (usage close to maxUsage)
@@ -178,8 +194,8 @@ class DiscountService {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => Discount.fromFirestore(doc))
-            .where((discount) => 
-                discount.maxUsage > 0 && 
+            .where((discount) =>
+                discount.maxUsage > 0 &&
                 discount.currentUsage >= (discount.maxUsage * 0.9))
             .toList());
   }
@@ -192,7 +208,7 @@ class DiscountService {
   }) async {
     try {
       Discount? discount = await getDiscountById(discountId);
-      
+
       if (discount == null || !discount.isActive) {
         return false;
       }
@@ -208,15 +224,15 @@ class DiscountService {
       }
 
       // Check route applicability
-      if (!discount.applicableRoutes.contains('all') && 
+      if (!discount.applicableRoutes.contains('all') &&
           !discount.applicableRoutes.contains(routeId)) {
         return false;
       }
 
       // Check eligibility
-      bool hasEligibility = discount.eligibility.any((elig) => 
-          eligibilityTypes.contains(elig) || elig == 'all');
-      
+      bool hasEligibility = discount.eligibility
+          .any((elig) => eligibilityTypes.contains(elig) || elig == 'all');
+
       return hasEligibility;
     } catch (e) {
       print('Error validating discount: $e');

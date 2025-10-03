@@ -5,7 +5,7 @@ import '../models/admin_models.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
-  
+
   User? _user;
   AdminUser? _adminUser;
   bool _isLoading = false;
@@ -42,8 +42,9 @@ class AuthProvider with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      UserCredential? result = await _authService.signInWithEmailAndPassword(email, password);
-      
+      UserCredential? result =
+          await _authService.signInWithEmailAndPassword(email, password);
+
       if (result?.user != null) {
         bool isAdmin = await _authService.isAdmin(result!.user!.uid);
         if (!isAdmin) {

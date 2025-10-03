@@ -27,7 +27,7 @@ class _MainLayoutState extends State<MainLayout> {
             width: _isDrawerOpen ? 280 : 70,
             child: _buildSidebar(),
           ),
-          
+
           // Main Content Area
           Expanded(
             child: Column(
@@ -49,7 +49,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   Widget _buildSidebar() {
     final currentRoute = GoRouterState.of(context).uri.toString();
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -66,7 +66,8 @@ class _MainLayoutState extends State<MainLayout> {
           // Logo Header
           Container(
             height: 70,
-            padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppConstants.defaultPadding),
             child: Row(
               children: [
                 Icon(
@@ -80,18 +81,18 @@ class _MainLayoutState extends State<MainLayout> {
                     child: Text(
                       'UVExpress',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          
+
           const Divider(height: 1),
-          
+
           // Navigation Items
           Expanded(
             child: ListView(
@@ -122,32 +123,25 @@ class _MainLayoutState extends State<MainLayout> {
                   isSelected: currentRoute == AppConstants.routesRoute,
                 ),
                 _buildNavItem(
-                  icon: Icons.discount,
-                  label: AppStrings.discounts,
-                  route: AppConstants.discountsRoute,
-                  isSelected: currentRoute == AppConstants.discountsRoute,
-                ),
-                _buildNavItem(
                   icon: Icons.analytics,
                   label: AppStrings.analytics,
                   route: AppConstants.analyticsRoute,
                   isSelected: currentRoute == AppConstants.analyticsRoute,
                 ),
-                
                 const SizedBox(height: AppConstants.defaultPadding),
                 if (_isDrawerOpen)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppConstants.defaultPadding),
                     child: Text(
                       'SYSTEM',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[600],
-                        letterSpacing: 1.2,
-                      ),
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                            letterSpacing: 1.2,
+                          ),
                     ),
                   ),
-                
                 _buildNavItem(
                   icon: Icons.settings,
                   label: AppStrings.settings,
@@ -157,7 +151,7 @@ class _MainLayoutState extends State<MainLayout> {
               ],
             ),
           ),
-          
+
           // User Profile Section
           const Divider(height: 1),
           _buildUserProfile(),
@@ -186,12 +180,14 @@ class _MainLayoutState extends State<MainLayout> {
               vertical: AppConstants.smallPadding + 4,
             ),
             decoration: BoxDecoration(
-              color: isSelected 
+              color: isSelected
                   ? Theme.of(context).primaryColor.withOpacity(0.1)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+              borderRadius:
+                  BorderRadius.circular(AppConstants.defaultBorderRadius),
               border: isSelected
-                  ? Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3))
+                  ? Border.all(
+                      color: Theme.of(context).primaryColor.withOpacity(0.3))
                   : null,
             ),
             child: Row(
@@ -199,7 +195,7 @@ class _MainLayoutState extends State<MainLayout> {
                 Icon(
                   icon,
                   size: 22,
-                  color: isSelected 
+                  color: isSelected
                       ? Theme.of(context).primaryColor
                       : Colors.grey[600],
                 ),
@@ -210,8 +206,9 @@ class _MainLayoutState extends State<MainLayout> {
                       label,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        color: isSelected 
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected
                             ? Theme.of(context).primaryColor
                             : Colors.grey[700],
                       ),
@@ -251,14 +248,15 @@ class _MainLayoutState extends State<MainLayout> {
             icon: const Icon(Icons.menu),
             tooltip: _isDrawerOpen ? 'Collapse sidebar' : 'Expand sidebar',
           ),
-          
+
           const SizedBox(width: AppConstants.defaultPadding),
-          
+
           // Page Title
           Expanded(
             child: Consumer<AuthProvider>(
               builder: (context, authProvider, _) {
-                String pageTitle = _getPageTitle(GoRouterState.of(context).uri.toString());
+                String pageTitle =
+                    _getPageTitle(GoRouterState.of(context).uri.toString());
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -266,22 +264,22 @@ class _MainLayoutState extends State<MainLayout> {
                     Text(
                       pageTitle,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     if (authProvider.adminUser != null)
                       Text(
                         'Welcome back, ${authProvider.adminUser!.name}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                              color: Colors.grey[600],
+                            ),
                       ),
                   ],
                 );
               },
             ),
           ),
-          
+
           // Action Buttons
           IconButton(
             onPressed: () {
@@ -290,12 +288,12 @@ class _MainLayoutState extends State<MainLayout> {
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notifications',
           ),
-          
+
           const SizedBox(width: AppConstants.smallPadding),
-          
+
           // User Menu
           _buildUserMenu(),
-          
+
           const SizedBox(width: AppConstants.defaultPadding),
         ],
       ),
@@ -306,7 +304,7 @@ class _MainLayoutState extends State<MainLayout> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         if (authProvider.adminUser == null) return const SizedBox.shrink();
-        
+
         return Container(
           padding: const EdgeInsets.all(AppConstants.defaultPadding),
           child: Row(
@@ -338,7 +336,9 @@ class _MainLayoutState extends State<MainLayout> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        authProvider.adminUser!.role.replaceAll('_', ' ').toUpperCase(),
+                        authProvider.adminUser!.role
+                            .replaceAll('_', ' ')
+                            .toUpperCase(),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -362,7 +362,8 @@ class _MainLayoutState extends State<MainLayout> {
         return PopupMenuButton<String>(
           offset: const Offset(0, 50),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            borderRadius:
+                BorderRadius.circular(AppConstants.defaultBorderRadius),
           ),
           child: Container(
             padding: const EdgeInsets.symmetric(

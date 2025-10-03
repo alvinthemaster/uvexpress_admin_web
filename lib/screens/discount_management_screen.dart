@@ -17,8 +17,8 @@ class DiscountManagementScreen extends StatelessWidget {
                   child: Text(
                     'Discount Management',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                 ),
                 ElevatedButton.icon(

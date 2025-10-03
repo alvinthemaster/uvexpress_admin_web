@@ -13,18 +13,19 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   // Sign in with email and password
-  Future<UserCredential?> signInWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential?> signInWithEmailAndPassword(
+      String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       // Update last login time in admin_users collection
       if (result.user != null) {
         await _updateLastLogin(result.user!.uid);
       }
-      
+
       return result;
     } catch (e) {
       print('Error signing in: $e');
@@ -45,7 +46,8 @@ class AuthService {
   // Check if user is admin
   Future<bool> isAdmin(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('admin_users').doc(uid).get();
+      DocumentSnapshot doc =
+          await _firestore.collection('admin_users').doc(uid).get();
       if (doc.exists) {
         AdminUser admin = AdminUser.fromFirestore(doc);
         return admin.isActive;
@@ -60,7 +62,8 @@ class AuthService {
   // Get admin user details
   Future<AdminUser?> getAdminUser(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('admin_users').doc(uid).get();
+      DocumentSnapshot doc =
+          await _firestore.collection('admin_users').doc(uid).get();
       if (doc.exists) {
         return AdminUser.fromFirestore(doc);
       }
@@ -117,7 +120,10 @@ class AuthService {
           createdAt: DateTime.now(),
         );
 
-        await _firestore.collection('admin_users').doc(result.user!.uid).set(adminUser.toFirestore());
+        await _firestore
+            .collection('admin_users')
+            .doc(result.user!.uid)
+            .set(adminUser.toFirestore());
       }
     } catch (e) {
       print('Error creating admin user: $e');
@@ -155,7 +161,7 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': null,
         }, SetOptions(merge: true));
-        
+
         return 'Admin account updated successfully!\nEmail: admin@uvexpress.com\nPassword: admin123';
       }
 
@@ -183,7 +189,7 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': null,
         });
-        
+
         return 'Admin account created successfully!\nEmail: admin@uvexpress.com\nPassword: admin123';
       } else {
         throw Exception('Failed to create Firebase Auth user');

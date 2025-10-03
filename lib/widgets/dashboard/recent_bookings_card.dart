@@ -27,8 +27,8 @@ class RecentBookingsCard extends StatelessWidget {
                   child: Text(
                     'Recent Bookings',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ),
                 TextButton(
@@ -42,8 +42,9 @@ class RecentBookingsCard extends StatelessWidget {
             const SizedBox(height: AppConstants.defaultPadding),
             Consumer<BookingProvider>(
               builder: (context, bookingProvider, _) {
-                final recentBookings = bookingProvider.bookings.take(5).toList();
-                
+                final recentBookings =
+                    bookingProvider.bookings.take(5).toList();
+
                 if (recentBookings.isEmpty) {
                   return const Center(
                     child: Padding(
@@ -52,9 +53,11 @@ class RecentBookingsCard extends StatelessWidget {
                     ),
                   );
                 }
-                
+
                 return Column(
-                  children: recentBookings.map((booking) => _buildBookingItem(context, booking)).toList(),
+                  children: recentBookings
+                      .map((booking) => _buildBookingItem(context, booking))
+                      .toList(),
                 );
               },
             ),

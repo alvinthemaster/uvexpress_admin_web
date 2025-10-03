@@ -101,7 +101,7 @@ class Discount {
 
   double calculateDiscountAmount(double baseAmount) {
     if (!isActive) return 0.0;
-    
+
     switch (type) {
       case 'percentage':
         return baseAmount * (value / 100);
