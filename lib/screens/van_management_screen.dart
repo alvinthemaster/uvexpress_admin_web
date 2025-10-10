@@ -1111,12 +1111,12 @@ class AddVanDialog extends StatefulWidget {
 class _AddVanDialogState extends State<AddVanDialog> {
   final _formKey = GlobalKey<FormState>();
   final _plateNumberController = TextEditingController();
-  final _capacityController = TextEditingController();
+  final _capacityController = TextEditingController(text: '18'); // Default capacity to 18
   final _driverNameController = TextEditingController();
   final _driverLicenseController = TextEditingController();
   final _driverContactController = TextEditingController();
 
-  String _selectedStatus = 'boarding'; // Default to boarding status
+  String _selectedStatus = 'in_queue'; // Default to in queue status
   String? _selectedRouteId; // Route selection
   bool _isLoading = false;
   List<route_model.Route> _availableRoutes = [];
@@ -1255,8 +1255,8 @@ class _AddVanDialogState extends State<AddVanDialog> {
                           if (capacity == null || capacity <= 0) {
                             return 'Enter a valid capacity greater than 0';
                           }
-                          if (capacity > 50) {
-                            return 'Capacity seems too high. Please verify.';
+                          if (capacity > 18) {
+                            return 'Capacity cannot exceed 18 seats';
                           }
                           return null;
                         },
@@ -1768,8 +1768,8 @@ class _EditVanDialogState extends State<EditVanDialog> {
                           if (capacity == null || capacity <= 0) {
                             return 'Enter a valid capacity greater than 0';
                           }
-                          if (capacity > 50) {
-                            return 'Capacity seems too high. Please verify.';
+                          if (capacity > 18) {
+                            return 'Capacity cannot exceed 18 seats';
                           }
                           return null;
                         },

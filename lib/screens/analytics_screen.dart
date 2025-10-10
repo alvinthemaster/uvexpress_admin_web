@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../services/booking_service.dart';
 import '../services/van_service.dart';
 import '../models/van_model.dart';
+import '../providers/van_provider.dart';
 import '../utils/constants.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -48,8 +50,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         _selectedDate,
       );
 
+      // Get active vans count from van provider
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      final activeVansCount = vanProvider.activeVansCount;
+
       setState(() {
         _statistics = statistics;
+        _statistics['activeVans'] = activeVansCount; // Replace activeUsers with activeVans
         _hourlyDistribution = hourlyDistribution;
         _isLoading = false;
       });
@@ -230,9 +237,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         )),
         const SizedBox(width: AppConstants.defaultPadding),
         Expanded(child: _buildStatCard(
-          'Active Users',
-          _statistics['activeUsers']?.toString() ?? '0',
-          Icons.people,
+          'Active Vans',
+          _statistics['activeVans']?.toString() ?? '0',
+          Icons.local_shipping,
           Colors.orange,
         )),
         const SizedBox(width: AppConstants.defaultPadding),
@@ -335,7 +342,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         x: 1,
         barRods: [
           BarChartRodData(
-            toY: _statistics['activeUsers']?.toDouble() ?? 0.0,
+            toY: _statistics['activeVans']?.toDouble() ?? 0.0,
             color: Colors.green,
             width: 20,
             borderRadius: BorderRadius.circular(4),
@@ -378,7 +385,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   case 0:
                     return const Text('Total Users');
                   case 1:
-                    return const Text('Active Users');
+                    return const Text('Active Vans');
                   case 2:
                     return const Text('New Today');
                   default:
@@ -572,7 +579,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget _buildUserActivityChart() {
     final Map<String, int> userActivityData = {
       'Total Users': _statistics['totalUsers'] ?? 0,
-      'Active Users': _statistics['activeUsers'] ?? 0,
+      'Active Vans': _statistics['activeVans'] ?? 0,
       'New Users Today': _statistics['newUsersToday'] ?? 0,
     };
 
@@ -618,7 +625,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget _buildUserActivityLegend() {
     final Map<String, int> userActivityData = {
       'Total Users': _statistics['totalUsers'] ?? 0,
-      'Active Users': _statistics['activeUsers'] ?? 0,
+      'Active Vans': _statistics['activeVans'] ?? 0,
       'New Users Today': _statistics['newUsersToday'] ?? 0,
     };
 
