@@ -117,7 +117,7 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
                 const SizedBox(width: AppConstants.defaultPadding),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedStatusFilter,
+                    initialValue: _selectedStatusFilter,
                     decoration: const InputDecoration(
                       labelText: 'Booking Status',
                       border: OutlineInputBorder(),
@@ -138,7 +138,7 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
                 const SizedBox(width: AppConstants.defaultPadding),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedPaymentFilter,
+                    initialValue: _selectedPaymentFilter,
                     decoration: const InputDecoration(
                       labelText: 'Payment Status',
                       border: OutlineInputBorder(),
@@ -350,12 +350,12 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '₱${booking.totalAmount.toStringAsFixed(2)}',
+                  '${AppConstants.currencySymbol}${booking.totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (booking.discountAmount > 0)
                   Text(
-                    '- ₱${booking.discountAmount.toStringAsFixed(2)}',
+                    '- ${AppConstants.currencySymbol}${booking.discountAmount.toStringAsFixed(2)}',
                     style: TextStyle(color: Colors.green[600], fontSize: 12),
                   ),
               ],
@@ -596,9 +596,9 @@ class _BookingDetailsDialog extends StatelessWidget {
                 'Seat IDs: ${booking!.seatIds.join(', ')}',
               ]),
               _buildDetailSection('Payment Information', [
-                'Base Price: ₱${booking!.basePrice.toStringAsFixed(2)}',
-                'Discount: ₱${booking!.discountAmount.toStringAsFixed(2)}',
-                'Total: ₱${booking!.totalAmount.toStringAsFixed(2)}',
+                'Base Price: ${AppConstants.currencySymbol}${booking!.basePrice.toStringAsFixed(2)}',
+                'Discount: ${AppConstants.currencySymbol}${booking!.discountAmount.toStringAsFixed(2)}',
+                'Total: ${AppConstants.currencySymbol}${booking!.totalAmount.toStringAsFixed(2)}',
                 'Method: ${booking!.paymentMethod}',
                 'Status: ${booking!.paymentStatus}',
               ]),

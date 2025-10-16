@@ -18,30 +18,70 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          // Sidebar Navigation
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _isDrawerOpen ? 280 : 70,
-            child: _buildSidebar(),
-          ),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768;
+    
+    // Adjust drawer behavior based on screen size
+    if (isMobile) {
+      _isDrawerOpen = false; // Force closed on mobile
+    }
 
-          // Main Content Area
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: Container(
-                    color: Colors.grey[50],
-                    child: widget.child,
-                  ),
+    return Scaffold(
+      body: Stack(
+        children: [
+          Row(
+            children: [
+              // Sidebar Navigation
+              if (!isMobile)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: _isDrawerOpen ? 280 : 70,
+                  child: _buildSidebar(),
                 ),
-              ],
-            ),
+
+              // Main Content Area
+              Expanded(
+                child: Column(
+                  children: [
+                    _buildTopBar(),
+                    Expanded(
+                      child: Container(
+                        color: Colors.grey[50],
+                        width: double.infinity,
+                        constraints: const BoxConstraints(
+                          minWidth: 0, // Allow shrinking
+                        ),
+                        child: ClipRect(
+                          child: widget.child,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          
+          // Mobile Sidebar Overlay
+          if (isMobile && _isDrawerOpen)
+            GestureDetector(
+              onTap: () => setState(() => _isDrawerOpen = false),
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+          
+          if (isMobile && _isDrawerOpen)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: (screenWidth * 0.8).clamp(250.0, 300.0),
+              child: _buildSidebar(),
+            ),
         ],
       ),
     );

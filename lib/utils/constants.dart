@@ -96,9 +96,18 @@ class AppConstants {
   static final DateFormat displayDateTimeFormat =
       DateFormat('MMM dd, yyyy HH:mm');
 
+  // Currency
+  static const String currencySymbol = '₱'; // Philippine Peso symbol
+  static const String currencyCode = 'PHP'; // Philippine Peso code
+  static const String localeCode = 'en_PH'; // Philippine English locale
+
   // Number Formats
   static final NumberFormat currencyFormat =
-      NumberFormat.currency(symbol: '₱', decimalDigits: 2);
+      NumberFormat.currency(
+        symbol: currencySymbol, 
+        decimalDigits: 2,
+        locale: localeCode,
+      );
   static final NumberFormat percentFormat = NumberFormat.percentPattern();
   static final NumberFormat compactFormat = NumberFormat.compact();
 

@@ -166,7 +166,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${route.origin} → ${route.destination}'),
-            Text('₱${route.basePrice.toStringAsFixed(2)} • ${route.estimatedDuration} minutes'),
+            Text('${AppConstants.currencySymbol}${route.basePrice.toStringAsFixed(2)} • ${route.estimatedDuration} minutes'),
           ],
         ),
         trailing: Row(
@@ -665,9 +665,9 @@ class _AddRouteDialogState extends State<AddRouteDialog> {
                   Expanded(
                     child: TextFormField(
                       controller: _basePriceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Base Price (₱) *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'Base Price (${AppConstants.currencySymbol}) *',
+                        border: const OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {

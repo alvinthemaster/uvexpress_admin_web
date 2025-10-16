@@ -86,6 +86,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 1200;
+    final isTablet = screenWidth > 768 && screenWidth <= 1200;
+    
     return Scaffold(
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -100,39 +104,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildStatsOverview(),
             const SizedBox(height: AppConstants.largePadding),
 
-            // Charts and Recent Data
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Left Column
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      const UserActivityChartCard(),
-                      const SizedBox(height: AppConstants.defaultPadding),
-                      _buildHourlyBookingsChart(),
-                    ],
+            // Charts and Recent Data - Responsive Layout
+            if (isDesktop) 
+              // Desktop: Side by side layout
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left Column
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      children: [
+                        const UserActivityChartCard(),
+                        const SizedBox(height: AppConstants.defaultPadding),
+                        _buildHourlyBookingsChart(),
+                      ],
+                    ),
                   ),
-                ),
 
-                const SizedBox(width: AppConstants.defaultPadding),
+                  const SizedBox(width: AppConstants.defaultPadding),
 
-                // Right Column
-                Expanded(
-                  flex: 1,
-                  child: Column(
-                    children: [
-                      const VanQueueCard(),
-                      const SizedBox(height: AppConstants.defaultPadding),
-                      const RecentBookingsCard(),
-                      const SizedBox(height: AppConstants.defaultPadding),
-                      _buildQuickActions(),
-                    ],
+                  // Right Column
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      children: [
+                        const VanQueueCard(),
+                        const SizedBox(height: AppConstants.defaultPadding),
+                        const RecentBookingsCard(),
+                        const SizedBox(height: AppConstants.defaultPadding),
+                        _buildQuickActions(),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              )
+            else 
+              // Tablet and Mobile: Stacked layout
+              Column(
+                children: [
+                  // Charts first
+                  const UserActivityChartCard(),
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  _buildHourlyBookingsChart(),
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  
+                  // Then other widgets
+                  if (isTablet)
+                    // Tablet: Two columns for the smaller widgets
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const VanQueueCard(),
+                              const SizedBox(height: AppConstants.defaultPadding),
+                              _buildQuickActions(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppConstants.defaultPadding),
+                        const Expanded(
+                          child: RecentBookingsCard(),
+                        ),
+                      ],
+                    )
+                  else
+                    // Mobile: Single column
+                    Column(
+                      children: [
+                        const VanQueueCard(),
+                        const SizedBox(height: AppConstants.defaultPadding),
+                        const RecentBookingsCard(),
+                        const SizedBox(height: AppConstants.defaultPadding),
+                        _buildQuickActions(),
+                      ],
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -201,43 +251,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildStatsOverview() {
     return Consumer2<BookingProvider, VanProvider>(
       builder: (context, bookingProvider, vanProvider, _) {
-        return Row(
-          children: [
-            Expanded(
-              child: StatsCard(
-                title: 'Today\'s Bookings',
-                value: bookingProvider.todayBookingsCount.toString(),
-                icon: Icons.book_online,
-                color: Colors.blue,
-                subtitle:
-                    '+${AppHelpers.formatPercentage(0.12)} from yesterday',
-                isPositive: true,
-              ),
-            ),
-            const SizedBox(width: AppConstants.defaultPadding),
-            Expanded(
-              child: StatsCard(
-                title: 'Total User Accounts',
-                value: bookingProvider.totalUserAccounts.toString(),
-                icon: Icons.account_circle,
-                color: Colors.green,
-                subtitle: '${bookingProvider.todayNewUsers} new today',
-                isPositive: bookingProvider.todayNewUsers > 0,
-              ),
-            ),
-            const SizedBox(width: AppConstants.defaultPadding),
-            Expanded(
-              child: StatsCard(
-                title: 'Active Vans',
-                value: vanProvider.activeVansCount.toString(),
-                icon: Icons.directions_bus,
-                color: Colors.orange,
-                subtitle: '${vanProvider.totalVans} total vans',
-                isPositive: null,
-              ),
-            ),
-          ],
-        );
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isMobile = screenWidth < 768;
+        
+        final stats = [
+          StatsCard(
+            title: 'Today\'s Bookings',
+            value: bookingProvider.todayBookingsCount.toString(),
+            icon: Icons.book_online,
+            color: Colors.blue,
+            subtitle:
+                '+${AppHelpers.formatPercentage(0.12)} from yesterday',
+            isPositive: true,
+          ),
+          StatsCard(
+            title: 'Total User Accounts',
+            value: bookingProvider.totalUserAccounts.toString(),
+            icon: Icons.account_circle,
+            color: Colors.green,
+            subtitle: '${bookingProvider.todayNewUsers} new today',
+            isPositive: bookingProvider.todayNewUsers > 0,
+          ),
+          StatsCard(
+            title: 'Active Vans',
+            value: vanProvider.activeVansCount.toString(),
+            icon: Icons.directions_bus,
+            color: Colors.orange,
+            subtitle: '${vanProvider.totalVans} total vans',
+            isPositive: null,
+          ),
+        ];
+
+        if (isMobile) {
+          // Mobile: Stack cards vertically
+          return Column(
+            children: stats.map((card) => 
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppConstants.defaultPadding),
+                child: card,
+              )
+            ).toList(),
+          );
+        } else {
+          // Desktop/Tablet: Row layout
+          return Row(
+            children: [
+              for (int i = 0; i < stats.length; i++) ...[
+                Expanded(child: stats[i]),
+                if (i < stats.length - 1) 
+                  const SizedBox(width: AppConstants.defaultPadding),
+              ],
+            ],
+          );
+        }
       },
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:intl/intl.dart';
+import 'constants.dart';
 
 class AppHelpers {
   // Date and Time Formatting
@@ -34,17 +35,27 @@ class AppHelpers {
 
   // Currency Formatting
   static String formatCurrency(double amount) {
-    return NumberFormat.currency(symbol: '₱', decimalDigits: 2).format(amount);
+    return AppConstants.currencyFormat.format(amount);
   }
 
   static String formatCompactCurrency(double amount) {
     if (amount >= 1000000) {
-      return '₱${(amount / 1000000).toStringAsFixed(1)}M';
+      return '${AppConstants.currencySymbol}${(amount / 1000000).toStringAsFixed(1)}M';
     } else if (amount >= 1000) {
-      return '₱${(amount / 1000).toStringAsFixed(1)}K';
+      return '${AppConstants.currencySymbol}${(amount / 1000).toStringAsFixed(1)}K';
     } else {
       return formatCurrency(amount);
     }
+  }
+
+  // Safe currency amount formatting (without symbol for display concatenation)
+  static String formatCurrencyAmount(double amount, {int decimalDigits = 2}) {
+    return amount.toStringAsFixed(decimalDigits);
+  }
+
+  // Currency with symbol for safe rendering
+  static String formatCurrencyWithSymbol(double amount, {int decimalDigits = 2}) {
+    return '${AppConstants.currencySymbol}${formatCurrencyAmount(amount, decimalDigits: decimalDigits)}';
   }
 
   // Number Formatting

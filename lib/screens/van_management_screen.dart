@@ -1347,7 +1347,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
 
                       // Route Selection
                       DropdownButtonFormField<String?>(
-                        value: _selectedRouteId,
+                        initialValue: _selectedRouteId,
                         decoration: const InputDecoration(
                           labelText: 'Assign to Route (Optional)',
                           hintText: 'Select a route for this van',
@@ -1411,7 +1411,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
 
                       // Van Status
                       DropdownButtonFormField<String>(
-                        value: _selectedStatus,
+                        initialValue: _selectedStatus,
                         decoration: const InputDecoration(
                           labelText: 'Van Status *',
                           hintText: 'Select van status',
@@ -1859,7 +1859,7 @@ class _EditVanDialogState extends State<EditVanDialog> {
 
                       // Route Selection
                       DropdownButtonFormField<String?>(
-                        value: _selectedRouteId,
+                        initialValue: _selectedRouteId,
                         decoration: const InputDecoration(
                           labelText: 'Assign to Route',
                           hintText: 'Select a route for this van',
@@ -1923,7 +1923,7 @@ class _EditVanDialogState extends State<EditVanDialog> {
 
                       // Van Status
                       DropdownButtonFormField<String>(
-                        value: _selectedStatus,
+                        initialValue: _selectedStatus,
                         decoration: const InputDecoration(
                           labelText: 'Van Status *',
                           hintText: 'Select van status',
@@ -2302,7 +2302,7 @@ class _RouteAssignmentDialogState extends State<RouteAssignmentDialog> {
             const SizedBox(height: AppConstants.smallPadding),
 
             DropdownButtonFormField<String?>(
-              value: _selectedRouteId,
+              initialValue: _selectedRouteId,
               decoration: const InputDecoration(
                 labelText: 'Route',
                 hintText: 'Select a route for this van',
@@ -2338,7 +2338,7 @@ class _RouteAssignmentDialogState extends State<RouteAssignmentDialog> {
             const SizedBox(height: AppConstants.smallPadding),
 
             DropdownButtonFormField<String>(
-              value: _selectedStatus,
+              initialValue: _selectedStatus,
               decoration: const InputDecoration(
                 labelText: 'Status',
                 hintText: 'Select van status',
@@ -2495,7 +2495,7 @@ class _RouteManagementDialogState extends State<RouteManagementDialog> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                            'Price: ₱${route.basePrice.toStringAsFixed(2)}'),
+                                            'Price: ${AppConstants.currencySymbol}${route.basePrice.toStringAsFixed(2)}'),
                                         Text(
                                             'Duration: ${route.estimatedDuration} minutes'),
                                         Text(
