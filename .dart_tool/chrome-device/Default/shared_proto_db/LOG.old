@@ -1,8 +1,6 @@
-2025/10/03-22:40:44.990 5328 Reusing MANIFEST C:\Users\yourb\AppData\Local\Temp\flutter_tools.d22451c6\flutter_tools_chrome_device.a8eeb117\Default\shared_proto_db/MANIFEST-000001
-2025/10/03-22:40:44.991 5328 Recovering log #3
-2025/10/03-22:40:44.991 5328 Level-0 table #3: started
-2025/10/03-22:40:44.994 5328 Level-0 table #3: 30988 bytes OK
-2025/10/03-22:40:44.995 5328 Recovering log #4
-2025/10/03-22:40:44.996 5328 Reusing old log C:\Users\yourb\AppData\Local\Temp\flutter_tools.d22451c6\flutter_tools_chrome_device.a8eeb117\Default\shared_proto_db/000004.log 
-2025/10/03-22:40:44.998 5328 Delete type=0 #3
-2025/10/03-22:40:44.998 5328 Delete type=2 #5
+2025/10/20-20:13:38.548 6ff4 Reusing MANIFEST C:\Users\yourb\AppData\Local\Temp\flutter_tools.3dd904fa\flutter_tools_chrome_device.af20097b\Default\shared_proto_db/MANIFEST-000001
+2025/10/20-20:13:38.549 6ff4 Recovering log #6
+2025/10/20-20:13:38.550 6ff4 Reusing old log C:\Users\yourb\AppData\Local\Temp\flutter_tools.3dd904fa\flutter_tools_chrome_device.af20097b\Default\shared_proto_db/000006.log 
+2025/10/20-20:13:38.550 6ff4 Delete type=0 #3
+2025/10/20-20:13:38.550 6ff4 Delete type=0 #4
+2025/10/20-20:13:38.550 6ff4 Delete type=2 #5

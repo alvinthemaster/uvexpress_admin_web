@@ -2809,15 +2809,28 @@ class OccupancyAdjustmentDialog extends StatefulWidget {
 class _OccupancyAdjustmentDialogState extends State<OccupancyAdjustmentDialog> {
   final _occupancyController = TextEditingController();
   bool _isLoading = false;
+  late int _currentOccupancy;
 
   @override
   void initState() {
     super.initState();
+    _currentOccupancy = widget.van.currentOccupancy;
     _occupancyController.text = widget.van.currentOccupancy.toString();
+    _occupancyController.addListener(_onOccupancyChanged);
+  }
+
+  void _onOccupancyChanged() {
+    final newValue = int.tryParse(_occupancyController.text);
+    if (newValue != null && newValue != _currentOccupancy) {
+      setState(() {
+        _currentOccupancy = newValue;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _occupancyController.removeListener(_onOccupancyChanged);
     _occupancyController.dispose();
     super.dispose();
   }
@@ -2884,7 +2897,7 @@ class _OccupancyAdjustmentDialogState extends State<OccupancyAdjustmentDialog> {
   @override
   Widget build(BuildContext context) {
     final occupancyPercentage = widget.van.capacity > 0 
-        ? widget.van.currentOccupancy / widget.van.capacity 
+        ? _currentOccupancy / widget.van.capacity 
         : 0.0;
 
     return Dialog(
@@ -2929,7 +2942,7 @@ class _OccupancyAdjustmentDialogState extends State<OccupancyAdjustmentDialog> {
                     children: [
                       const Text('Current Occupancy:'),
                       Text(
-                        '${widget.van.currentOccupancy}/${widget.van.capacity}',
+                        '$_currentOccupancy/${widget.van.capacity}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],

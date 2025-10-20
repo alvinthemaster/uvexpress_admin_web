@@ -405,25 +405,27 @@ class VanService {
         throw Exception('Van not found');
       }
 
-      print('🚐 Van ${van.plateNumber}: Current occupancy ${van.currentOccupancy}/${van.capacity}');
+      print('🚐 Van ${van.plateNumber}: Current occupancy ${van.currentOccupancy}/${van.capacity}, Status: ${van.status}');
 
       // Step 2: Mark all active bookings for this van as completed
       await _completeAllBookingsForVan(vanId);
       
-      // Step 3: Reset van occupancy to 0 (this releases all seats)
+      // Step 3: Force reset van occupancy to 0 and status to "in_queue"
+      // This is done in a single atomic update to avoid race conditions
       await _firestore.collection(_collection).doc(vanId).update({
         'currentOccupancy': 0,
+        'status': 'in_queue', // Force status to in_queue immediately
       });
 
-      print('🔄 Van ${van.plateNumber}: Occupancy reset from ${van.currentOccupancy} to 0');
+      print('🔄 Van ${van.plateNumber}: Occupancy reset from ${van.currentOccupancy} to 0, Status forced to "in_queue"');
 
-      // Step 4: Verify occupancy is in sync with actual bookings
+      // Step 4: Verify occupancy is in sync with actual bookings (should confirm 0)
       await _syncVanOccupancyWithBookings(vanId);
 
-      // Step 5: Update van status based on new occupancy (will likely become "in_queue")
+      // Step 5: Double-check status is correct (redundant safety check)
       await _checkAndUpdateVanStatus(vanId);
 
-      print('✅ Trip completion finished for van ${van.plateNumber} - all ${van.currentOccupancy} seats are now available for new bookings');
+      print('✅ Trip completion finished for van ${van.plateNumber} - all seats available, status="in_queue", queue position unchanged');
     } catch (e) {
       print('❌ Error completing van trip: $e');
       rethrow;
@@ -502,11 +504,13 @@ class VanService {
         return;
       }
 
-      // Count actual active bookings for this van's route
+      // Count actual active bookings for THIS SPECIFIC VAN using vanPlateNumber
+      // This ensures we only count bookings for this van, not other vans on the same route
       QuerySnapshot activeBookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('bookingStatus', whereIn: ['active', 'pending'])
+          .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
+          .where('bookingStatus', whereIn: ['confirmed', 'active', 'pending'])
           .get();
 
       int actualOccupancy = 0;
