@@ -446,21 +446,30 @@ class VanService {
         return;
       }
 
-      // Query bookings for this SPECIFIC van only using vanPlateNumber
-      // This ensures we only complete bookings for this van, not other vans on the same route
-      QuerySnapshot bookingsSnapshot = await _firestore
+      // Query confirmed/active bookings for this SPECIFIC van
+      QuerySnapshot confirmedBookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
           .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
           .where('bookingStatus', whereIn: ['confirmed', 'active'])
           .get();
 
+      // Query pending bookings for this SPECIFIC van
+      QuerySnapshot pendingBookingsSnapshot = await _firestore
+          .collection('bookings')
+          .where('routeId', isEqualTo: van.currentRouteId)
+          .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
+          .where('bookingStatus', isEqualTo: 'pending')
+          .get();
+
       WriteBatch batch = _firestore.batch();
       int completedCount = 0;
+      int failedCount = 0;
       int totalSeatsReleased = 0;
       List<String> releasedSeats = [];
 
-      for (QueryDocumentSnapshot bookingDoc in bookingsSnapshot.docs) {
+      // Process confirmed/active bookings - mark as completed
+      for (QueryDocumentSnapshot bookingDoc in confirmedBookingsSnapshot.docs) {
         Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
         int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
         List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
@@ -478,9 +487,33 @@ class VanService {
         releasedSeats.addAll(seatIds);
       }
 
-      if (completedCount > 0) {
+      // Process pending bookings - mark as failed
+      for (QueryDocumentSnapshot bookingDoc in pendingBookingsSnapshot.docs) {
+        Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
+        int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
+        List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
+        
+        // Mark booking as failed
+        batch.update(bookingDoc.reference, {
+          'bookingStatus': 'failed',
+          'cancellationReason': 'Trip completed before payment confirmation',
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'adminCancellation': true,
+        });
+        
+        failedCount++;
+        totalSeatsReleased += numberOfSeats;
+        releasedSeats.addAll(seatIds);
+      }
+
+      if (completedCount > 0 || failedCount > 0) {
         await batch.commit();
-        print('📋 Marked $completedCount bookings as completed for van ${van.plateNumber}');
+        if (completedCount > 0) {
+          print('📋 Marked $completedCount bookings as completed for van ${van.plateNumber}');
+        }
+        if (failedCount > 0) {
+          print('❌ Marked $failedCount pending bookings as failed for van ${van.plateNumber}');
+        }
         print('💺 Released $totalSeatsReleased seats: ${releasedSeats.join(", ")}');
         print('✅ All reserved seats for van ${van.plateNumber} are now available for new bookings');
       } else {

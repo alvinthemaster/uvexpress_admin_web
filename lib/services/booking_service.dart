@@ -100,6 +100,27 @@ class BookingService {
     }
   }
 
+  // Delete booking
+  Future<void> deleteBooking(String id) async {
+    try {
+      // Get the booking before deleting to update van occupancy
+      Booking? booking = await getBookingById(id);
+      
+      // Delete the booking document
+      await _firestore.collection(_collection).doc(id).delete();
+      
+      // If booking was found and has a route, update van occupancy
+      if (booking != null && booking.routeId.isNotEmpty) {
+        await _updateVanOccupancyForRoute(booking.routeId);
+      }
+      
+      print('Booking $id deleted successfully');
+    } catch (e) {
+      print('Error deleting booking: $e');
+      rethrow;
+    }
+  }
+
   // Create a new booking
   Future<String> createBooking(Booking booking) async {
     try {

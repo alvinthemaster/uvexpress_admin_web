@@ -389,6 +389,16 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
                     const PopupMenuItem(value: 'edit', child: Text('Edit')),
                     const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
                     const PopupMenuItem(value: 'refund', child: Text('Refund')),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
                   ],
                   child: const Icon(Icons.more_vert),
                 ),
@@ -414,6 +424,7 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
           color = Colors.green;
           break;
         case 'cancelled':
+        case 'failed':
           color = Colors.red;
           break;
         default:
@@ -541,11 +552,101 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
             );
           }
           break;
+        case 'delete':
+          _showDeleteConfirmation(booking);
+          break;
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _showDeleteConfirmation(Booking booking) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red),
+              const SizedBox(width: 8),
+              const Text('Delete Booking'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Are you sure you want to delete this booking?'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(color: Colors.red.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Booking ID: ${booking.id.substring(0, 8)}...', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Passenger: ${booking.userName}'),
+                    Text('Route: ${booking.routeName}'),
+                    Text('Seats: ${booking.seatIds.join(", ")}'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '⚠️ This action cannot be undone!',
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _deleteBooking(booking);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteBooking(Booking booking) async {
+    try {
+      await _bookingService.deleteBooking(booking.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Booking deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting booking: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
