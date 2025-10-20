@@ -433,7 +433,7 @@ class VanService {
   // Mark all active bookings for a specific van as completed
   Future<void> _completeAllBookingsForVan(String vanId) async {
     try {
-      // Get van details to find associated route
+      // Get van details to find associated route and plate number
       Van? van = await getVanById(vanId);
       if (van == null) return;
 
@@ -444,25 +444,28 @@ class VanService {
         return;
       }
 
-      // Query bookings that might be associated with this van
-      // Fix: Use correct field names - bookingStatus instead of status
+      // Query bookings for this SPECIFIC van only using vanPlateNumber
+      // This ensures we only complete bookings for this van, not other vans on the same route
       QuerySnapshot bookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('bookingStatus', whereIn: ['active', 'pending'])
+          .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
+          .where('bookingStatus', whereIn: ['confirmed', 'active'])
           .get();
 
       WriteBatch batch = _firestore.batch();
       int completedCount = 0;
       int totalSeatsReleased = 0;
+      List<String> releasedSeats = [];
 
       for (QueryDocumentSnapshot bookingDoc in bookingsSnapshot.docs) {
         Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
         int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
+        List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
         
-        // Mark booking as completed instead of cancelled
+        // Mark booking as completed
         batch.update(bookingDoc.reference, {
-          'bookingStatus': 'completed', // Fix: Use correct field name
+          'bookingStatus': 'completed',
           'completionReason': 'Trip completed by administrator',
           'completedAt': FieldValue.serverTimestamp(),
           'adminCompletion': true,
@@ -470,11 +473,14 @@ class VanService {
         
         completedCount++;
         totalSeatsReleased += numberOfSeats;
+        releasedSeats.addAll(seatIds);
       }
 
       if (completedCount > 0) {
         await batch.commit();
-        print('📋 Marked $completedCount bookings as completed for van ${van.plateNumber} - $totalSeatsReleased seats released, trip history preserved');
+        print('📋 Marked $completedCount bookings as completed for van ${van.plateNumber}');
+        print('💺 Released $totalSeatsReleased seats: ${releasedSeats.join(", ")}');
+        print('✅ All reserved seats for van ${van.plateNumber} are now available for new bookings');
       } else {
         print('📋 No active bookings found to complete for van ${van.plateNumber}');
       }
