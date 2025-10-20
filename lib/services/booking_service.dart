@@ -142,8 +142,15 @@ class BookingService {
       // Get all vans assigned to this route
       List<Van> vansOnRoute = await _vanService.getVansByRoute(routeId);
       
+      // ONLY update occupancy for vans with "boarding" status
+      // Vans in "ready" status (in queue) should not be affected
       for (Van van in vansOnRoute) {
-        await _updateVanOccupancyFromBookings(van.id);
+        if (van.status.toLowerCase() == 'boarding') {
+          await _updateVanOccupancyFromBookings(van.id);
+          print('✅ Updated occupancy for boarding van: ${van.plateNumber}');
+        } else {
+          print('⏭️ Skipped van ${van.plateNumber} (Status: ${van.status} - not boarding)');
+        }
       }
     } catch (e) {
       print('Error updating van occupancy for route: $e');
@@ -164,17 +171,30 @@ class BookingService {
       DateTime startOfDay = DateTime(today.year, today.month, today.day);
       DateTime endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
+      // Simplified query to avoid Firestore index requirement
+      // Filter by route only, then filter in Dart
       QuerySnapshot bookingSnapshot = await _firestore
           .collection(_collection)
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('bookingStatus', whereIn: ['confirmed', 'active'])
-          .where('departureTime', isGreaterThanOrEqualTo: startOfDay)
-          .where('departureTime', isLessThanOrEqualTo: endOfDay)
           .get();
 
       int totalOccupancy = 0;
       for (DocumentSnapshot doc in bookingSnapshot.docs) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        
+        // Filter by status
+        String status = data['bookingStatus'] ?? '';
+        if (status != 'confirmed' && status != 'active') continue;
+        
+        // Filter by today's date
+        Timestamp? departureTimestamp = data['departureTime'] as Timestamp?;
+        if (departureTimestamp != null) {
+          DateTime departureTime = departureTimestamp.toDate();
+          if (departureTime.isBefore(startOfDay) || departureTime.isAfter(endOfDay)) {
+            continue;
+          }
+        }
+        
         totalOccupancy += (data['numberOfSeats'] ?? 0) as int;
       }
 

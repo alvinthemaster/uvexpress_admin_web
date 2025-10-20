@@ -46,11 +46,23 @@ class Booking {
   final double totalAmount;
   final String paymentMethod;
   final String paymentStatus; // pending, paid, failed, refunded
-  final String bookingStatus; // active, completed, cancelled
+  final String bookingStatus; // confirmed, active, completed, cancelled
   final String? qrCodeData;
   final String? eTicketId;
   final PassengerDetails passengerDetails;
   final String? discountApplied;
+  // Van-related fields (required by mobile app)
+  final String? vanPlateNumber;
+  final String? vanDriverName;
+  final String? vanDriverContact;
+  // Cancellation fields
+  final DateTime? cancelledAt;
+  final String? cancellationReason;
+  final String? cancelledBy;
+  // Completion fields
+  final DateTime? completedAt;
+  final String? completionReason;
+  final bool? adminCompletion;
 
   Booking({
     required this.id,
@@ -75,6 +87,15 @@ class Booking {
     this.eTicketId,
     required this.passengerDetails,
     this.discountApplied,
+    this.vanPlateNumber,
+    this.vanDriverName,
+    this.vanDriverContact,
+    this.cancelledAt,
+    this.cancellationReason,
+    this.cancelledBy,
+    this.completedAt,
+    this.completionReason,
+    this.adminCompletion,
   });
 
   factory Booking.fromFirestore(DocumentSnapshot doc) {
@@ -99,12 +120,21 @@ class Booking {
       totalAmount: (data['totalAmount'] ?? 0).toDouble(),
       paymentMethod: data['paymentMethod'] ?? '',
       paymentStatus: data['paymentStatus'] ?? 'pending',
-      bookingStatus: data['bookingStatus'] ?? 'active',
+      bookingStatus: data['bookingStatus'] ?? 'confirmed',
       qrCodeData: data['qrCodeData'],
       eTicketId: data['eTicketId'],
       passengerDetails:
           PassengerDetails.fromMap(data['passengerDetails'] ?? {}),
       discountApplied: data['discountApplied'],
+      vanPlateNumber: data['vanPlateNumber'],
+      vanDriverName: data['vanDriverName'],
+      vanDriverContact: data['vanDriverContact'],
+      cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
+      cancellationReason: data['cancellationReason'],
+      cancelledBy: data['cancelledBy'],
+      completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+      completionReason: data['completionReason'],
+      adminCompletion: data['adminCompletion'],
     );
   }
 
@@ -131,6 +161,18 @@ class Booking {
       'eTicketId': eTicketId,
       'passengerDetails': passengerDetails.toMap(),
       'discountApplied': discountApplied,
+      // Van details - required by mobile app
+      'vanPlateNumber': vanPlateNumber,
+      'vanDriverName': vanDriverName,
+      'vanDriverContact': vanDriverContact,
+      // Cancellation fields
+      'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
+      'cancellationReason': cancellationReason,
+      'cancelledBy': cancelledBy,
+      // Completion fields
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'completionReason': completionReason,
+      'adminCompletion': adminCompletion,
     };
   }
 
@@ -157,6 +199,15 @@ class Booking {
     String? eTicketId,
     PassengerDetails? passengerDetails,
     String? discountApplied,
+    String? vanPlateNumber,
+    String? vanDriverName,
+    String? vanDriverContact,
+    DateTime? cancelledAt,
+    String? cancellationReason,
+    String? cancelledBy,
+    DateTime? completedAt,
+    String? completionReason,
+    bool? adminCompletion,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -181,6 +232,15 @@ class Booking {
       eTicketId: eTicketId ?? this.eTicketId,
       passengerDetails: passengerDetails ?? this.passengerDetails,
       discountApplied: discountApplied ?? this.discountApplied,
+      vanPlateNumber: vanPlateNumber ?? this.vanPlateNumber,
+      vanDriverName: vanDriverName ?? this.vanDriverName,
+      vanDriverContact: vanDriverContact ?? this.vanDriverContact,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
+      cancelledBy: cancelledBy ?? this.cancelledBy,
+      completedAt: completedAt ?? this.completedAt,
+      completionReason: completionReason ?? this.completionReason,
+      adminCompletion: adminCompletion ?? this.adminCompletion,
     );
   }
 }
