@@ -617,23 +617,23 @@ class VanService {
     }
   }
 
-  // New method: Progress queue when a van becomes full
+  // New method: Progress queue when a vehicle becomes full
   Future<void> _progressQueueAfterVanFull(Van fullVan) async {
     try {
-      print('🚀 Processing queue progression after van ${fullVan.plateNumber} became full');
-      print('📍 Full van details: Route=${fullVan.currentRouteId}, Position=${fullVan.queuePosition}');
+      print('🚀 Processing queue progression after vehicle ${fullVan.plateNumber} (${fullVan.vehicleType}) became full');
+      print('📍 Full vehicle details: Route=${fullVan.currentRouteId}, Position=${fullVan.queuePosition}');
       
-      // Find the next van in queue for the same route (if assigned to a route)
+      // Find the next vehicle in queue for the same route (if assigned to a route)
       if (fullVan.currentRouteId != null && fullVan.currentRouteId!.isNotEmpty) {
-        print('🛣️ Van has route assigned: ${fullVan.currentRouteId}');
+        print('🛣️ Vehicle has route assigned: ${fullVan.currentRouteId}');
         await _progressRouteQueue(fullVan.currentRouteId!, fullVan.queuePosition);
       } else {
-        print('🆓 Van has no route - progressing general queue');
-        // For unassigned vans, progress the general queue
+        print('🆓 Vehicle has no route - progressing general queue');
+        // For unassigned vehicles, progress the general queue
         await _progressGeneralQueue(fullVan.queuePosition);
       }
     } catch (e) {
-      print('❌ Error progressing queue after van became full: $e');
+      print('❌ Error progressing queue after vehicle became full: $e');
       rethrow;
     }
   }
@@ -641,43 +641,43 @@ class VanService {
   // Progress queue for vans on a specific route
   Future<void> _progressRouteQueue(String routeId, int fullVanPosition) async {
     try {
-      print('🔍 Searching for next van on route $routeId after position $fullVanPosition');
+      print('🔍 Searching for next vehicle on route $routeId after position $fullVanPosition');
       
-      // Get all vans on the same route (simplified query to avoid index requirement)
+      // Get all vehicles on the same route (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .where('currentRouteId', isEqualTo: routeId)
           .get();
 
-      print('📊 Found ${snapshot.docs.length} vans on route $routeId');
+      print('📊 Found ${snapshot.docs.length} vehicles on route $routeId');
 
-      // Filter and find the next van in queue locally
-      List<Van> routeVans = snapshot.docs
+      // Filter and find the next vehicle in queue locally (CRITICAL: Based on position, not vehicle type)
+      List<Van> routeVehicles = snapshot.docs
           .map((doc) => Van.fromFirestore(doc))
-          .where((van) => 
-              van.queuePosition > fullVanPosition && 
-              van.status == 'in_queue')
+          .where((vehicle) => 
+              vehicle.queuePosition > fullVanPosition && 
+              vehicle.status == 'in_queue')
           .toList();
       
-      // Sort by queue position and get the first one
-      routeVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+      // Sort by queue position and get the first one (CRITICAL: This ensures proper queue order)
+      routeVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
 
-      if (routeVans.isNotEmpty) {
-        Van nextVan = routeVans.first;
+      if (routeVehicles.isNotEmpty) {
+        Van nextVehicle = routeVehicles.first;
         
-        print('✅ Found next van: ${nextVan.plateNumber} at position ${nextVan.queuePosition}');
+        print('✅ Found next vehicle: ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) at position ${nextVehicle.queuePosition}');
         
-        // Update the next van's status to boarding
-        await _firestore.collection(_collection).doc(nextVan.id).update({
+        // Update the next vehicle's status to boarding
+        await _firestore.collection(_collection).doc(nextVehicle.id).update({
           'status': 'boarding',
         });
         
-        print('🎯 Queue progressed: Van ${nextVan.plateNumber} automatically updated from "in_queue" to "boarding" on route $routeId');
+        print('🎯 Queue progressed: Vehicle ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) automatically updated from "in_queue" to "boarding" on route $routeId');
       } else {
-        print('⚠️ No more vans in queue for route $routeId after position $fullVanPosition');
-        print('🔄 Implementing queue loop - searching for first van to cycle back to "boarding"');
+        print('⚠️ No more vehicles in queue for route $routeId after position $fullVanPosition');
+        print('🔄 Implementing queue loop - searching for first vehicle to cycle back to "boarding"');
         
-        // LOOPING LOGIC: When no more vans in queue, cycle back to the first van
+        // LOOPING LOGIC: When no more vehicles in queue, cycle back to the first vehicle
         await _loopBackToFirstVan(routeId);
       }
     } catch (e) {
@@ -686,54 +686,54 @@ class VanService {
     }
   }
 
-  // LOOPING LOGIC: Cycle back to the first van when queue is complete
+  // LOOPING LOGIC: Cycle back to the first vehicle when queue is complete
   Future<void> _loopBackToFirstVan(String routeId) async {
     try {
       print('🔄 Starting queue loop for route $routeId');
       
-      // Get all vans on the same route
+      // Get all vehicles on the same route (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .where('currentRouteId', isEqualTo: routeId)
           .get();
 
-      List<Van> allRouteVans = snapshot.docs
+      List<Van> allRouteVehicles = snapshot.docs
           .map((doc) => Van.fromFirestore(doc))
           .toList();
       
-      // Sort by queue position to find the first van
-      allRouteVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+      // Sort by queue position to find the first vehicle (CRITICAL: Position-based, not type-based)
+      allRouteVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
       
-      print('🔍 Found ${allRouteVans.length} vans on route $routeId');
+      print('🔍 Found ${allRouteVehicles.length} vehicles on route $routeId');
       
-      if (allRouteVans.isNotEmpty) {
-        Van firstVan = allRouteVans.first;
+      if (allRouteVehicles.isNotEmpty) {
+        Van firstVehicle = allRouteVehicles.first;
         
-        print('🎯 First van in queue: ${firstVan.plateNumber} at position ${firstVan.queuePosition} with status "${firstVan.status}"');
+        print('🎯 First vehicle in queue: ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) at position ${firstVehicle.queuePosition} with status "${firstVehicle.status}"');
         
-        // Check if the first van is full (indicating we've completed a cycle)
-        if (firstVan.status.toLowerCase() == 'full') {
-          print('🔄 Queue cycle complete! Resetting first van to "boarding" for continuous loop');
+        // Check if the first vehicle is full (indicating we've completed a cycle)
+        if (firstVehicle.status.toLowerCase() == 'full') {
+          print('🔄 Queue cycle complete! Resetting first vehicle to "boarding" for continuous loop');
           
-          // Reset the first van's occupancy and set status to boarding
-          await _firestore.collection(_collection).doc(firstVan.id).update({
+          // Reset the first vehicle's occupancy and set status to boarding
+          await _firestore.collection(_collection).doc(firstVehicle.id).update({
             'status': 'boarding',
             'currentOccupancy': 0, // Reset occupancy for new cycle
           });
           
-          print('✅ Van ${firstVan.plateNumber} reset to "boarding" status with 0 occupancy - Queue loop completed!');
-        } else if (firstVan.status.toLowerCase() == 'in_queue') {
-          // If first van is still in queue, set it to boarding
-          await _firestore.collection(_collection).doc(firstVan.id).update({
+          print('✅ Vehicle ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) reset to "boarding" status with 0 occupancy - Queue loop completed!');
+        } else if (firstVehicle.status.toLowerCase() == 'in_queue') {
+          // If first vehicle is still in queue, set it to boarding
+          await _firestore.collection(_collection).doc(firstVehicle.id).update({
             'status': 'boarding',
           });
           
-          print('✅ Van ${firstVan.plateNumber} promoted from "in_queue" to "boarding" - Queue loop initiated!');
+          print('✅ Vehicle ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) promoted from "in_queue" to "boarding" - Queue loop initiated!');
         } else {
-          print('ℹ️ First van ${firstVan.plateNumber} already has status "${firstVan.status}" - no loop action needed');
+          print('ℹ️ First vehicle ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) already has status "${firstVehicle.status}" - no loop action needed');
         }
       } else {
-        print('⚠️ No vans found on route $routeId for queue loop');
+        print('⚠️ No vehicles found on route $routeId for queue loop');
       }
     } catch (e) {
       print('❌ Error in queue loop back: $e');
@@ -741,44 +741,44 @@ class VanService {
     }
   }
 
-  // Progress general queue for unassigned vans
+  // Progress general queue for unassigned vehicles
   Future<void> _progressGeneralQueue(int fullVanPosition) async {
     try {
-      print('🔍 Searching for next unassigned van after position $fullVanPosition');
+      print('🔍 Searching for next unassigned vehicle after position $fullVanPosition');
       
-      // Get all vans (simplified query to avoid index requirement)
+      // Get all vehicles (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .get();
 
-      // Filter and find the next unassigned van in queue locally
-      List<Van> unassignedVans = snapshot.docs
+      // Filter and find the next unassigned vehicle in queue locally (CRITICAL: Position-based)
+      List<Van> unassignedVehicles = snapshot.docs
           .map((doc) => Van.fromFirestore(doc))
-          .where((van) => 
-              van.queuePosition > fullVanPosition && 
-              van.status == 'in_queue' &&
-              (van.currentRouteId == null || van.currentRouteId!.isEmpty))
+          .where((vehicle) => 
+              vehicle.queuePosition > fullVanPosition && 
+              vehicle.status == 'in_queue' &&
+              (vehicle.currentRouteId == null || vehicle.currentRouteId!.isEmpty))
           .toList();
       
-      // Sort by queue position and get the first one
-      unassignedVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+      // Sort by queue position and get the first one (CRITICAL: Ensures proper queue order)
+      unassignedVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
 
-      if (unassignedVans.isNotEmpty) {
-        Van nextVan = unassignedVans.first;
+      if (unassignedVehicles.isNotEmpty) {
+        Van nextVehicle = unassignedVehicles.first;
         
-        print('✅ Found next unassigned van: ${nextVan.plateNumber} at position ${nextVan.queuePosition}');
+        print('✅ Found next unassigned vehicle: ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) at position ${nextVehicle.queuePosition}');
         
-        // Update the next van's status to boarding
-        await _firestore.collection(_collection).doc(nextVan.id).update({
+        // Update the next vehicle's status to boarding
+        await _firestore.collection(_collection).doc(nextVehicle.id).update({
           'status': 'boarding',
         });
         
-        print('🎯 General queue progressed: Van ${nextVan.plateNumber} automatically updated from "in_queue" to "boarding"');
+        print('🎯 General queue progressed: Vehicle ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) automatically updated from "in_queue" to "boarding"');
       } else {
-        print('⚠️ No more unassigned vans in queue after position $fullVanPosition');
-        print('🔄 Implementing general queue loop - searching for first unassigned van to cycle back');
+        print('⚠️ No more unassigned vehicles in queue after position $fullVanPosition');
+        print('🔄 Implementing general queue loop - searching for first unassigned vehicle to cycle back');
         
-        // LOOPING LOGIC: When no more unassigned vans in queue, cycle back to the first unassigned van
+        // LOOPING LOGIC: When no more unassigned vehicles in queue, cycle back to the first unassigned vehicle
         await _loopBackToFirstUnassignedVan();
       }
     } catch (e) {
@@ -787,54 +787,54 @@ class VanService {
     }
   }
 
-  // LOOPING LOGIC: Cycle back to the first unassigned van when general queue is complete
+  // LOOPING LOGIC: Cycle back to the first unassigned vehicle when general queue is complete
   Future<void> _loopBackToFirstUnassignedVan() async {
     try {
-      print('🔄 Starting general queue loop for unassigned vans');
+      print('🔄 Starting general queue loop for unassigned vehicles');
       
-      // Get all unassigned vans
+      // Get all unassigned vehicles (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .get();
 
-      List<Van> unassignedVans = snapshot.docs
+      List<Van> unassignedVehicles = snapshot.docs
           .map((doc) => Van.fromFirestore(doc))
-          .where((van) => van.currentRouteId == null || van.currentRouteId!.isEmpty)
+          .where((vehicle) => vehicle.currentRouteId == null || vehicle.currentRouteId!.isEmpty)
           .toList();
       
-      // Sort by queue position to find the first unassigned van
-      unassignedVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+      // Sort by queue position to find the first unassigned vehicle (CRITICAL: Position-based)
+      unassignedVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
       
-      print('🔍 Found ${unassignedVans.length} unassigned vans');
+      print('🔍 Found ${unassignedVehicles.length} unassigned vehicles');
       
-      if (unassignedVans.isNotEmpty) {
-        Van firstUnassignedVan = unassignedVans.first;
+      if (unassignedVehicles.isNotEmpty) {
+        Van firstUnassignedVehicle = unassignedVehicles.first;
         
-        print('🎯 First unassigned van: ${firstUnassignedVan.plateNumber} at position ${firstUnassignedVan.queuePosition} with status "${firstUnassignedVan.status}"');
+        print('🎯 First unassigned vehicle: ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) at position ${firstUnassignedVehicle.queuePosition} with status "${firstUnassignedVehicle.status}"');
         
-        // Check if the first unassigned van is full (indicating we've completed a cycle)
-        if (firstUnassignedVan.status.toLowerCase() == 'full') {
-          print('🔄 General queue cycle complete! Resetting first unassigned van to "boarding"');
+        // Check if the first unassigned vehicle is full (indicating we've completed a cycle)
+        if (firstUnassignedVehicle.status.toLowerCase() == 'full') {
+          print('🔄 General queue cycle complete! Resetting first unassigned vehicle to "boarding"');
           
-          // Reset the first unassigned van's occupancy and set status to boarding
-          await _firestore.collection(_collection).doc(firstUnassignedVan.id).update({
+          // Reset the first unassigned vehicle's occupancy and set status to boarding
+          await _firestore.collection(_collection).doc(firstUnassignedVehicle.id).update({
             'status': 'boarding',
             'currentOccupancy': 0, // Reset occupancy for new cycle
           });
           
-          print('✅ Van ${firstUnassignedVan.plateNumber} reset to "boarding" status with 0 occupancy - General queue loop completed!');
-        } else if (firstUnassignedVan.status.toLowerCase() == 'in_queue') {
-          // If first unassigned van is still in queue, set it to boarding
-          await _firestore.collection(_collection).doc(firstUnassignedVan.id).update({
+          print('✅ Vehicle ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) reset to "boarding" status with 0 occupancy - General queue loop completed!');
+        } else if (firstUnassignedVehicle.status.toLowerCase() == 'in_queue') {
+          // If first unassigned vehicle is still in queue, set it to boarding
+          await _firestore.collection(_collection).doc(firstUnassignedVehicle.id).update({
             'status': 'boarding',
           });
           
-          print('✅ Van ${firstUnassignedVan.plateNumber} promoted from "in_queue" to "boarding" - General queue loop initiated!');
+          print('✅ Vehicle ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) promoted from "in_queue" to "boarding" - General queue loop initiated!');
         } else {
-          print('ℹ️ First unassigned van ${firstUnassignedVan.plateNumber} already has status "${firstUnassignedVan.status}" - no loop action needed');
+          print('ℹ️ First unassigned vehicle ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) already has status "${firstUnassignedVehicle.status}" - no loop action needed');
         }
       } else {
-        print('⚠️ No unassigned vans found for general queue loop');
+        print('⚠️ No unassigned vehicles found for general queue loop');
       }
     } catch (e) {
       print('❌ Error in general queue loop back: $e');
@@ -927,6 +927,52 @@ class VanService {
       }
     } catch (e) {
       print('Error updating all van statuses: $e');
+      rethrow;
+    }
+  }
+
+  // Fix and resequence all queue positions to ensure uniqueness and consistency
+  Future<void> fixQueuePositions() async {
+    try {
+      print('🔧 Starting queue position fix...');
+      
+      // Get all vehicles sorted by their current queue position
+      QuerySnapshot snapshot = await _firestore
+          .collection(_collection)
+          .orderBy('queuePosition')
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        print('✅ No vehicles found - nothing to fix');
+        return;
+      }
+
+      List<DocumentSnapshot> vehicles = snapshot.docs;
+      print('📊 Found ${vehicles.length} vehicles to resequence');
+
+      // Create a batch update
+      WriteBatch batch = _firestore.batch();
+      int correctPosition = 1;
+
+      for (DocumentSnapshot doc in vehicles) {
+        Van vehicle = Van.fromFirestore(doc);
+        
+        if (vehicle.queuePosition != correctPosition) {
+          print('🔄 Fixing ${vehicle.plateNumber}: Position ${vehicle.queuePosition} → $correctPosition');
+          batch.update(doc.reference, {'queuePosition': correctPosition});
+        } else {
+          print('✓ ${vehicle.plateNumber}: Position $correctPosition (already correct)');
+        }
+        
+        correctPosition++;
+      }
+
+      // Commit all changes
+      await batch.commit();
+      print('✅ Queue positions fixed! All vehicles now have unique sequential positions (1-${vehicles.length})');
+      
+    } catch (e) {
+      print('❌ Error fixing queue positions: $e');
       rethrow;
     }
   }

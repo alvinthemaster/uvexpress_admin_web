@@ -769,6 +769,7 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
   Map<String, bool> _seatDiscounts = {}; // Track discount per seat
   bool _isLoading = false;
   int _currentStep = 0;
+  bool _isBusLayout = false; // Toggle for seat layout type
 
   // Constants
   static const int _maxSeatsPerBooking = 5;
@@ -776,13 +777,28 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
   static const double _bookingFee = 15.0;
 
   // Van seat layout based on image - Driver, DIB (door), then 4 rows x 4 columns
-  final List<String> _seatLabels = [
-    'D1A', 'D1B',  // Front two selectable seats
-    'L1A', 'L1B', 'R1A', 'R1B',
-    'L2A', 'L2B', 'R2A', 'R2B',
-    'L3A', 'L3B', 'R3A', 'R3B',
-    'L4A', 'L4B', 'R4A', 'R4B',
-  ];
+  // Seat labels - dynamic based on toggle
+  List<String> get _seatLabels {
+    if (_isBusLayout) {
+      // 22-seater bus layout
+      return [
+        'D1A',  // Front seat next to driver
+        'L1A', 'L1B', 'R1A', 'R1B',  // Row 1
+        'L2A', 'L2B', 'R2A', 'R2B',  // Row 2
+        'L3A', 'L3B', 'R3A', 'R3B',  // Row 3
+        'L4A', 'L4B', 'R4A', 'R4B',  // Row 4
+        'L5A', 'L5B', 'L5C', 'R5A', 'R5B',  // Row 5 (back row with 5 seats)
+      ];
+    }
+    // 18-seater van layout (default)
+    return [
+      'D1A', 'D1B',  // Front two selectable seats
+      'L1A', 'L1B', 'R1A', 'R1B',
+      'L2A', 'L2B', 'R2A', 'R2B',
+      'L3A', 'L3B', 'R3A', 'R3B',
+      'L4A', 'L4B', 'R4A', 'R4B',
+    ];
+  }
 
   @override
   void dispose() {
@@ -1900,6 +1916,25 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        
+        // Toggle between Van and Bus layout
+        Center(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildLayoutToggle('Van (18 seats)', false),
+                _buildLayoutToggle('Bus (22 seats)', true),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
         
         // Driver label
@@ -1925,89 +1960,94 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
             ),
             child: Column(
               children: [
-                // Front row: Driver (non-selectable) + 2 DIB seats (selectable)
+                // Front row: Driver + seats
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Driver seat (non-selectable)
                     Container(
-                      width: 70,
-                      height: 70,
+                      width: 60,
+                      height: 60,
                       margin: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: Colors.grey[200],
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.grey[400]!),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.drive_eta, color: Colors.grey[600], size: 24),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Driver',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: Icon(Icons.drive_eta, color: Colors.grey[600], size: 24),
                     ),
-                    // DIB1 (selectable)
+                    const SizedBox(width: 4),
+                    // For van: D1A and D1B, For bus: just D1A
                     _buildSeat(
                       'D1A',
                       _reservedSeats.contains('D1A'),
-                      _selectedSeats.contains('D1B'),
+                      _selectedSeats.contains('D1A'),
                     ),
-                    const SizedBox(width: 4),
-                    // DIB2 (selectable)
-                    _buildSeat(
-                      'D1B',
-                      _reservedSeats.contains('D1A'),
-                      _selectedSeats.contains('D1B'),
-                    ),
-                    const SizedBox(width: 8),
+                    if (!_isBusLayout) ...[
+                      const SizedBox(width: 4),
+                      _buildSeat(
+                        'D1B',
+                        _reservedSeats.contains('D1B'),
+                        _selectedSeats.contains('D1B'),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
-                // 4 rows × 4 columns of seats (L1A, L1B, R1A, R1B, etc.)
+                // 4 rows × 4 columns of seats
                 ...List.generate(4, (rowIndex) {
+                  int startIndex = _isBusLayout ? (1 + rowIndex * 4) : (2 + rowIndex * 4);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Left pair (L#A, L#B)
+                        // Left pair
                         _buildSeat(
-                          _seatLabels[2 + rowIndex * 4],  // Offset by 2 for DIB1, DIB2
-                          _reservedSeats.contains(_seatLabels[2 + rowIndex * 4]),
-                          _selectedSeats.contains(_seatLabels[2 + rowIndex * 4]),
+                          _seatLabels[startIndex],
+                          _reservedSeats.contains(_seatLabels[startIndex]),
+                          _selectedSeats.contains(_seatLabels[startIndex]),
                         ),
                         const SizedBox(width: 4),
                         _buildSeat(
-                          _seatLabels[2 + rowIndex * 4 + 1],
-                          _reservedSeats.contains(_seatLabels[2 + rowIndex * 4 + 1]),
-                          _selectedSeats.contains(_seatLabels[2 + rowIndex * 4 + 1]),
+                          _seatLabels[startIndex + 1],
+                          _reservedSeats.contains(_seatLabels[startIndex + 1]),
+                          _selectedSeats.contains(_seatLabels[startIndex + 1]),
                         ),
                         const SizedBox(width: 16), // Aisle gap
-                        // Right pair (R#A, R#B)
+                        // Right pair
                         _buildSeat(
-                          _seatLabels[2 + rowIndex * 4 + 2],
-                          _reservedSeats.contains(_seatLabels[2 + rowIndex * 4 + 2]),
-                          _selectedSeats.contains(_seatLabels[2 + rowIndex * 4 + 2]),
+                          _seatLabels[startIndex + 2],
+                          _reservedSeats.contains(_seatLabels[startIndex + 2]),
+                          _selectedSeats.contains(_seatLabels[startIndex + 2]),
                         ),
                         const SizedBox(width: 4),
                         _buildSeat(
-                          _seatLabels[2 + rowIndex * 4 + 3],
-                          _reservedSeats.contains(_seatLabels[2 + rowIndex * 4 + 3]),
-                          _selectedSeats.contains(_seatLabels[2 + rowIndex * 4 + 3]),
+                          _seatLabels[startIndex + 3],
+                          _reservedSeats.contains(_seatLabels[startIndex + 3]),
+                          _selectedSeats.contains(_seatLabels[startIndex + 3]),
                         ),
                       ],
                     ),
                   );
                 }),
+                // Bus only: Last row with 5 seats
+                if (_isBusLayout) ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildSeat('L5A', _reservedSeats.contains('L5A'), _selectedSeats.contains('L5A')),
+                      const SizedBox(width: 4),
+                      _buildSeat('L5B', _reservedSeats.contains('L5B'), _selectedSeats.contains('L5B')),
+                      const SizedBox(width: 4),
+                      _buildSeat('L5C', _reservedSeats.contains('L5C'), _selectedSeats.contains('L5C')),
+                      const SizedBox(width: 4),
+                      _buildSeat('R5A', _reservedSeats.contains('R5A'), _selectedSeats.contains('R5A')),
+                      const SizedBox(width: 4),
+                      _buildSeat('R5B', _reservedSeats.contains('R5B'), _selectedSeats.contains('R5B')),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -2302,6 +2342,46 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
     totalAmount += _bookingFee;
     
     return totalAmount;
+  }
+
+  Widget _buildLayoutToggle(String label, bool isBus) {
+    final bool isSelected = _isBusLayout == isBus;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isBusLayout = isBus;
+          // Clear selected seats when switching layout
+          _selectedSeats.clear();
+          _seatDiscounts.clear();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isBus ? Icons.directions_bus : Icons.local_shipping,
+              size: 18,
+              color: isSelected ? Colors.white : Colors.blue[700],
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : Colors.blue[700],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildSeat(String seatId, bool isReserved, bool isSelected) {

@@ -266,6 +266,22 @@ class VanProvider with ChangeNotifier {
     }
   }
 
+  // Fix queue positions to ensure uniqueness and consistency
+  Future<void> fixQueuePositions() async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _vanService.fixQueuePositions();
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   int get totalVans => _vans.length;
   int get activeVansCount => _activeVans.length;
   int get inactiveVansCount => _vans.where((van) => !van.isActive).length;

@@ -137,15 +137,15 @@ class AuthService {
       // First, check if admin already exists
       QuerySnapshot existingAdmins = await _firestore
           .collection('admin_users')
-          .where('email', isEqualTo: 'admin@uvexpress.com')
+          .where('email', isEqualTo: 'ronamielabrica16@gmail.com')
           .get();
 
       if (existingAdmins.docs.isNotEmpty) {
         // Admin exists, just make sure it's properly formatted
         String adminId = existingAdmins.docs.first.id;
         await _firestore.collection('admin_users').doc(adminId).set({
-          'email': 'admin@uvexpress.com',
-          'name': 'Admin User',
+          'email': 'ronamielabrica16@gmail.com',
+          'name': 'Ronamie Labrica',
           'role': 'super_admin',
           'permissions': [
             'all',
@@ -162,18 +162,18 @@ class AuthService {
           'lastLogin': null,
         }, SetOptions(merge: true));
 
-        return 'Admin account updated successfully!\nEmail: admin@uvexpress.com\nPassword: admin123';
+        return 'Admin account updated successfully!\nEmail: ronamielabrica16@gmail.com\nPassword: admin123';
       }
 
       UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: 'admin@uvexpress.com',
+        email: 'ronamielabrica16@gmail.com',
         password: 'admin123',
       );
 
       if (result.user != null) {
         await _firestore.collection('admin_users').doc(result.user!.uid).set({
-          'email': 'admin@uvexpress.com',
-          'name': 'Admin User',
+          'email': 'ronamielabrica16@gmail.com',
+          'name': 'Ronamie Labrica',
           'role': 'super_admin',
           'permissions': [
             'all',
@@ -190,7 +190,7 @@ class AuthService {
           'lastLogin': null,
         });
 
-        return 'Admin account created successfully!\nEmail: admin@uvexpress.com\nPassword: admin123';
+        return 'Admin account created successfully!\nEmail: ronamielabrica16@gmail.com\nPassword: admin123';
       } else {
         throw Exception('Failed to create Firebase Auth user');
       }
@@ -199,10 +199,10 @@ class AuthService {
         // Try to find existing user and update their admin record
         try {
           User? user = _auth.currentUser;
-          if (user?.email == 'admin@uvexpress.com') {
+          if (user?.email == 'ronamielabrica16@gmail.com') {
             await _firestore.collection('admin_users').doc(user!.uid).set({
-              'email': 'admin@uvexpress.com',
-              'name': 'Admin User',
+              'email': 'ronamielabrica16@gmail.com',
+              'name': 'Ronamie Labrica',
               'role': 'super_admin',
               'permissions': [
                 'all',
@@ -219,9 +219,9 @@ class AuthService {
               'lastLogin': null,
             }, SetOptions(merge: true));
           }
-          return 'Admin account exists and updated!\nEmail: admin@uvexpress.com\nPassword: admin123';
+          return 'Admin account exists and updated!\nEmail: ronamielabrica16@gmail.com\nPassword: admin123';
         } catch (updateError) {
-          return 'Admin account already exists!\nEmail: admin@uvexpress.com\nPassword: admin123\nPlease contact support if you cannot access it.';
+          return 'Admin account already exists!\nEmail: ronamielabrica16@gmail.com\nPassword: admin123\nPlease contact support if you cannot access it.';
         }
       }
       throw Exception('Error creating admin account: $e');

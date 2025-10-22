@@ -47,6 +47,7 @@ class Van {
   final bool isActive;
   final DateTime createdAt;
   final int currentOccupancy; // Add this field
+  final String vehicleType; // 'van' or 'bus'
 
   Van({
     required this.id,
@@ -61,6 +62,7 @@ class Van {
     required this.isActive,
     required this.createdAt,
     this.currentOccupancy = 0, // Default to 0
+    this.vehicleType = 'van', // Default to van for backward compatibility
   });
 
   // Comprehensive status mapping for admin-mobile compatibility
@@ -170,6 +172,7 @@ class Van {
       isActive: data['isActive'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       currentOccupancy: data['currentOccupancy'] ?? 0,
+      vehicleType: data['vehicleType'] ?? 'van', // Default to van for backward compatibility
     );
   }
 
@@ -188,6 +191,7 @@ class Van {
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
       'currentOccupancy': currentOccupancy,
+      'vehicleType': vehicleType,
     };
   }
 
@@ -204,6 +208,7 @@ class Van {
     bool? isActive,
     DateTime? createdAt,
     int? currentOccupancy,
+    String? vehicleType,
   }) {
     return Van(
       id: id ?? this.id,
@@ -218,6 +223,7 @@ class Van {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       currentOccupancy: currentOccupancy ?? this.currentOccupancy,
+      vehicleType: vehicleType ?? this.vehicleType,
     );
   }
 }

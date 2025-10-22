@@ -256,6 +256,86 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     }
   }
 
+  // Fix queue positions to ensure uniqueness and consistency
+  Future<void> _fixQueuePositions() async {
+    try {
+      // Show confirmation dialog
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.build, color: Colors.red),
+                const SizedBox(width: AppConstants.smallPadding),
+                const Expanded(child: Text('Fix Queue Positions')),
+              ],
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This will resequence all vehicle queue positions to ensure:'),
+                SizedBox(height: AppConstants.smallPadding),
+                Text('• Each vehicle has a unique position'),
+                Text('• Positions are sequential (1, 2, 3, ...)'),
+                Text('• No duplicate or missing positions'),
+                SizedBox(height: AppConstants.smallPadding),
+                Text('This is safe and will not affect vehicle status or bookings.'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.build),
+                label: const Text('Fix Positions'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fixing queue positions...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      await vanProvider.fixQueuePositions();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Queue positions fixed successfully! All vehicles now have unique sequential positions.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error fixing queue positions: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -282,14 +362,14 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Van Management',
+                'Fleet Management',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
               ),
               const SizedBox(height: AppConstants.smallPadding),
               Text(
-                'Manage your fleet of vans and track their status',
+                'Manage your fleet of vans and buses - track their status and performance',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
@@ -305,6 +385,17 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               onPressed: () => _showAddVanDialog(),
               icon: const Icon(Icons.add),
               label: const Text('Add Van'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _showAddBusDialog(),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Bus'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+              ),
             ),
             OutlinedButton.icon(
               onPressed: () => _showRouteManagementDialog(),
@@ -343,6 +434,14 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                 foregroundColor: Colors.purple,
               ),
             ),
+            OutlinedButton.icon(
+              onPressed: _fixQueuePositions,
+              icon: const Icon(Icons.build),
+              label: const Text('Fix Queue Positions'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+            ),
           ],
         ),
       ],
@@ -356,7 +455,7 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
           flex: 3,
           child: TextField(
             decoration: const InputDecoration(
-              hintText: 'Search vans by plate number or driver name...',
+              hintText: 'Search vehicles by plate number or driver name...',
               prefixIcon: Icon(Icons.search),
             ),
             onChanged: (value) {
@@ -370,7 +469,7 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
         Expanded(
           flex: 2,
           child: DropdownButtonFormField<String>(
-            initialValue: _statusFilter,
+            value: _statusFilter,
             decoration: const InputDecoration(
               labelText: 'Status Filter',
               prefixIcon: Icon(Icons.filter_list),
@@ -386,9 +485,11 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
             ],
             onChanged: (value) {
-              setState(() {
-                _statusFilter = value ?? 'all';
-              });
+              if (value != null) {
+                setState(() {
+                  _statusFilter = value;
+                });
+              }
             },
           ),
         ),
@@ -420,9 +521,12 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               filteredVans.where((van) => van.status == _statusFilter).toList();
         }
 
+        // CRITICAL: Always sort by queue position to ensure correct display order
+        filteredVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+
         if (filteredVans.isEmpty) {
           return const Center(
-            child: Text('No vans found matching your criteria'),
+            child: Text('No vehicles found matching your criteria'),
           );
         }
 
@@ -462,6 +566,37 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                 children: [
                   Row(
                     children: [
+                      // Vehicle Type Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: van.vehicleType == 'bus' ? Colors.green : Colors.blue,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              van.vehicleType == 'bus' ? Icons.directions_bus : Icons.local_shipping,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              van.vehicleType == 'bus' ? 'BUS' : 'VAN',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppConstants.smallPadding),
                       Text(
                         van.plateNumber,
                         style:
@@ -677,7 +812,15 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AddVanDialog(),
+      builder: (context) => AddVanDialog(vehicleType: 'van'),
+    );
+  }
+
+  void _showAddBusDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AddVanDialog(vehicleType: 'bus'),
     );
   }
 
@@ -1102,7 +1245,9 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
 }
 
 class AddVanDialog extends StatefulWidget {
-  const AddVanDialog({super.key});
+  final String vehicleType; // 'van' or 'bus'
+  
+  const AddVanDialog({super.key, this.vehicleType = 'van'});
 
   @override
   State<AddVanDialog> createState() => _AddVanDialogState();
@@ -1111,7 +1256,7 @@ class AddVanDialog extends StatefulWidget {
 class _AddVanDialogState extends State<AddVanDialog> {
   final _formKey = GlobalKey<FormState>();
   final _plateNumberController = TextEditingController();
-  final _capacityController = TextEditingController(text: '18'); // Default capacity to 18
+  late TextEditingController _capacityController;
   final _driverNameController = TextEditingController();
   final _driverLicenseController = TextEditingController();
   final _driverContactController = TextEditingController();
@@ -1124,6 +1269,9 @@ class _AddVanDialogState extends State<AddVanDialog> {
   @override
   void initState() {
     super.initState();
+    // Set default capacity based on vehicle type
+    final defaultCapacity = widget.vehicleType == 'bus' ? '22' : '18';
+    _capacityController = TextEditingController(text: defaultCapacity);
     _loadRoutes();
   }
 
@@ -1175,14 +1323,14 @@ class _AddVanDialogState extends State<AddVanDialog> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.local_shipping,
+                    widget.vehicleType == 'bus' ? Icons.directions_bus : Icons.local_shipping,
                     color: Colors.white,
                     size: 24,
                   ),
                   const SizedBox(width: AppConstants.smallPadding),
                   Expanded(
                     child: Text(
-                      'Add New Van',
+                      'Add New ${widget.vehicleType == 'bus' ? 'Bus' : 'Van'}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -1255,8 +1403,10 @@ class _AddVanDialogState extends State<AddVanDialog> {
                           if (capacity == null || capacity <= 0) {
                             return 'Enter a valid capacity greater than 0';
                           }
-                          if (capacity > 18) {
-                            return 'Capacity cannot exceed 18 seats';
+                          // Different max capacity based on vehicle type
+                          final maxCapacity = widget.vehicleType == 'bus' ? 22 : 18;
+                          if (capacity > maxCapacity) {
+                            return 'Capacity cannot exceed $maxCapacity seats';
                           }
                           return null;
                         },
@@ -1481,7 +1631,9 @@ class _AddVanDialogState extends State<AddVanDialog> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.add),
-                    label: Text(_isLoading ? 'Adding...' : 'Add Van'),
+                    label: Text(_isLoading 
+                        ? 'Adding...' 
+                        : widget.vehicleType == 'bus' ? 'Add Bus' : 'Add Van'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppConstants.defaultPadding,
@@ -1531,6 +1683,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
             .contains(_selectedStatus), // Active if bookable
         createdAt: DateTime.now(),
         currentOccupancy: 0, // Initialize with 0 occupancy
+        vehicleType: widget.vehicleType, // Set vehicle type (van or bus)
       );
 
       // Add the van
@@ -1539,6 +1692,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
       if (!mounted) return;
 
       // Show success message
+      final vehicleName = widget.vehicleType == 'bus' ? 'Bus' : 'Van';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -1546,7 +1700,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
               const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: AppConstants.smallPadding),
               Expanded(
-                child: Text('Van ${van.plateNumber} added successfully!'),
+                child: Text('$vehicleName ${van.plateNumber} added successfully!'),
               ),
             ],
           ),
