@@ -230,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppConstants.smallPadding),
             const Text('Transportation Management System'),
             const SizedBox(height: AppConstants.smallPadding),
-            Text('© 2025 Godtrasco. All rights reserved.'),
+            Text('© 2025 Godtrasco. All rights reserved. Developed by AATJR.'),
           ],
         ),
         actions: [

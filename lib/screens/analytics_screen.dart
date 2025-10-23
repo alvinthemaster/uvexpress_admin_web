@@ -236,12 +236,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Colors.green,
         )),
         const SizedBox(width: AppConstants.defaultPadding),
-        Expanded(child: _buildStatCard(
-          'Active Vans',
-          _statistics['activeVans']?.toString() ?? '0',
-          Icons.local_shipping,
-          Colors.orange,
-        )),
+        Expanded(child: _buildActiveVansCard()),
         const SizedBox(width: AppConstants.defaultPadding),
         Expanded(child: _buildStatCard(
           'New Users Today',
@@ -251,6 +246,129 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         )),
       ],
     );
+  }
+
+  Widget _buildActiveVansCard() {
+    return StreamBuilder<List<Van>>(
+      stream: _vanService.getVansStream(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _buildStatCard(
+            'Active Vans',
+            '0',
+            Icons.local_shipping,
+            Colors.orange,
+          );
+        }
+
+        final vans = snapshot.data!;
+        final activeVans = vans.where((van) => van.isActive).toList();
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // Show icons with status colors
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: activeVans.take(5).map((van) {
+                        final statusColor = _getStatusColor(van.status);
+                        final vehicleIcon = van.vehicleType.toLowerCase() == 'bus' 
+                            ? Icons.directions_bus 
+                            : Icons.local_shipping;
+                        
+                        return Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: statusColor, width: 1.5),
+                          ),
+                          child: Icon(
+                            vehicleIcon,
+                            color: statusColor,
+                            size: 16,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getPeriodLabel(),
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppConstants.smallPadding),
+                Text(
+                  activeVans.length.toString(),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+                Text(
+                  'Active Vans',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    final normalizedStatus = status.toLowerCase().trim();
+    
+    switch (normalizedStatus) {
+      case 'boarding':
+      case 'loading':
+        return Colors.green; // Actively boarding passengers
+      case 'in_queue':
+      case 'in-queue':
+      case 'queue':
+      case 'ready':
+      case 'available':
+      case 'active':
+        return Colors.blue; // Ready/waiting in queue
+      case 'in_transit':
+      case 'in-transit':
+      case 'transit':
+      case 'traveling':
+        return Colors.purple; // On the road
+      case 'maintenance':
+      case 'under_maintenance':
+      case 'under-maintenance':
+        return Colors.red; // Under maintenance
+      case 'inactive':
+      case 'offline':
+      case 'disabled':
+        return Colors.grey; // Inactive
+      case 'full':
+        return Colors.orange; // Full capacity
+      default:
+        return Colors.blueGrey; // Unknown status
+    }
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
@@ -373,24 +491,43 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               showTitles: true,
               reservedSize: 40,
               getTitlesWidget: (value, meta) {
-                return Text('${value.toInt()}');
+                return Text(
+                  '${value.toInt()}',
+                  style: const TextStyle(fontSize: 11),
+                );
               },
             ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 48, // Increased to accommodate multiline text
               getTitlesWidget: (value, meta) {
+                String label = '';
                 switch (value.toInt()) {
                   case 0:
-                    return const Text('Total Users');
+                    label = 'Total\nUsers';
+                    break;
                   case 1:
-                    return const Text('Active Vans');
+                    label = 'Active\nVans';
+                    break;
                   case 2:
-                    return const Text('New Today');
+                    label = 'New\nToday';
+                    break;
                   default:
-                    return const Text('');
+                    return const SizedBox.shrink();
                 }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                );
               },
             ),
           ),
