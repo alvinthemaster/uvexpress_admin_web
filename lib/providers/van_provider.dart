@@ -106,6 +106,24 @@ class VanProvider with ChangeNotifier {
     }
   }
 
+  Future<void> moveVanUpByDay(String id, String day) async {
+    try {
+      await _vanService.moveVanUpByDay(id, day);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> moveVanDownByDay(String id, String day) async {
+    try {
+      await _vanService.moveVanDownByDay(id, day);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
   Future<void> setMaintenanceStatus(
       String id, DateTime? lastMaintenance, DateTime? nextMaintenance) async {
     try {

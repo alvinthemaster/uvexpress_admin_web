@@ -207,6 +207,104 @@ class VanService {
     }
   }
 
+  // Move van up by one position in day-specific queue
+  Future<void> moveVanUpByDay(String id, String day) async {
+    try {
+      Van? van = await getVanById(id);
+      if (van == null) return;
+      
+      final currentPosition = van.dayQueuePositions[day] ?? van.queuePosition;
+      if (currentPosition <= 1) return; // Already at the top
+      
+      final targetPosition = currentPosition - 1;
+      
+      // Find the van at the target position for this day
+      final vansSnapshot = await _firestore
+          .collection(_collection)
+          .where('weeklySchedule', arrayContains: day)
+          .get();
+      
+      Van? targetVan;
+      for (var doc in vansSnapshot.docs) {
+        final otherVan = Van.fromFirestore(doc);
+        final otherPosition = otherVan.dayQueuePositions[day] ?? otherVan.queuePosition;
+        if (otherPosition == targetPosition && otherVan.id != van.id) {
+          targetVan = otherVan;
+          break;
+        }
+      }
+      
+      if (targetVan != null) {
+        // Swap positions for this day
+        final updatedCurrentDayPos = Map<String, int>.from(van.dayQueuePositions);
+        updatedCurrentDayPos[day] = targetPosition;
+        
+        final updatedTargetDayPos = Map<String, int>.from(targetVan.dayQueuePositions);
+        updatedTargetDayPos[day] = currentPosition;
+        
+        // Update both vans
+        await _firestore.collection(_collection).doc(van.id).update({
+          'dayQueuePositions': updatedCurrentDayPos,
+        });
+        
+        await _firestore.collection(_collection).doc(targetVan.id).update({
+          'dayQueuePositions': updatedTargetDayPos,
+        });
+      }
+    } catch (e) {
+      print('Error moving van up by day: $e');
+      rethrow;
+    }
+  }
+
+  // Move van down by one position in day-specific queue
+  Future<void> moveVanDownByDay(String id, String day) async {
+    try {
+      Van? van = await getVanById(id);
+      if (van == null) return;
+      
+      final currentPosition = van.dayQueuePositions[day] ?? van.queuePosition;
+      final targetPosition = currentPosition + 1;
+      
+      // Find the van at the target position for this day
+      final vansSnapshot = await _firestore
+          .collection(_collection)
+          .where('weeklySchedule', arrayContains: day)
+          .get();
+      
+      Van? targetVan;
+      for (var doc in vansSnapshot.docs) {
+        final otherVan = Van.fromFirestore(doc);
+        final otherPosition = otherVan.dayQueuePositions[day] ?? otherVan.queuePosition;
+        if (otherPosition == targetPosition && otherVan.id != van.id) {
+          targetVan = otherVan;
+          break;
+        }
+      }
+      
+      if (targetVan != null) {
+        // Swap positions for this day
+        final updatedCurrentDayPos = Map<String, int>.from(van.dayQueuePositions);
+        updatedCurrentDayPos[day] = targetPosition;
+        
+        final updatedTargetDayPos = Map<String, int>.from(targetVan.dayQueuePositions);
+        updatedTargetDayPos[day] = currentPosition;
+        
+        // Update both vans
+        await _firestore.collection(_collection).doc(van.id).update({
+          'dayQueuePositions': updatedCurrentDayPos,
+        });
+        
+        await _firestore.collection(_collection).doc(targetVan.id).update({
+          'dayQueuePositions': updatedTargetDayPos,
+        });
+      }
+    } catch (e) {
+      print('Error moving van down by day: $e');
+      rethrow;
+    }
+  }
+
   // Set maintenance status
   Future<void> setMaintenanceStatus(
       String id, DateTime? lastMaintenance, DateTime? nextMaintenance) async {
@@ -691,25 +789,36 @@ class VanService {
     try {
       print('🔄 Starting queue loop for route $routeId');
       
+      // Get current day of week for filtering
+      final now = DateTime.now();
+      final dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      final currentDay = dayNames[now.weekday % 7]; // weekday: 1=Monday, 7=Sunday
+      
+      print('📅 Current day: $currentDay');
+      
       // Get all vehicles on the same route (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .where('currentRouteId', isEqualTo: routeId)
           .get();
 
-      List<Van> allRouteVehicles = snapshot.docs
-          .map((doc) => Van.fromFirestore(doc))
-          .toList();
-      
-      // Sort by queue position to find the first vehicle (CRITICAL: Position-based, not type-based)
-      allRouteVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
-      
-      print('🔍 Found ${allRouteVehicles.length} vehicles on route $routeId');
-      
-      if (allRouteVehicles.isNotEmpty) {
-        Van firstVehicle = allRouteVehicles.first;
+      // Find the vehicle at position 1 for today's queue
+      Van? firstVehicle;
+      for (var doc in snapshot.docs) {
+        Van vehicle = Van.fromFirestore(doc);
         
-        print('🎯 First vehicle in queue: ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) at position ${firstVehicle.queuePosition} with status "${firstVehicle.status}"');
+        // Check if vehicle is scheduled for today
+        bool isScheduledToday = vehicle.weeklySchedule.isEmpty || vehicle.weeklySchedule.contains(currentDay);
+        
+        // Check if this vehicle is at position 1 for today
+        if (isScheduledToday && vehicle.dayQueuePositions[currentDay] == 1) {
+          firstVehicle = vehicle;
+          break;
+        }
+      }
+      
+      if (firstVehicle != null) {
+        print('🎯 Found vehicle at position 1 for $currentDay: ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) with status "${firstVehicle.status}"');
         
         // Check if the first vehicle is full (indicating we've completed a cycle)
         if (firstVehicle.status.toLowerCase() == 'full') {
@@ -733,7 +842,7 @@ class VanService {
           print('ℹ️ First vehicle ${firstVehicle.plateNumber} (${firstVehicle.vehicleType}) already has status "${firstVehicle.status}" - no loop action needed');
         }
       } else {
-        print('⚠️ No vehicles found on route $routeId for queue loop');
+        print('⚠️ No vehicle found at position 1 on route $routeId for $currentDay');
       }
     } catch (e) {
       print('❌ Error in queue loop back: $e');
@@ -746,27 +855,47 @@ class VanService {
     try {
       print('🔍 Searching for next unassigned vehicle after position $fullVanPosition');
       
+      // Get current day of week for filtering
+      final now = DateTime.now();
+      final dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      final currentDay = dayNames[now.weekday % 7];
+      
+      print('📅 Current day: $currentDay');
+      
       // Get all vehicles (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .get();
 
-      // Filter and find the next unassigned vehicle in queue locally (CRITICAL: Position-based)
+      // Filter by day schedule and find the next unassigned vehicle in queue locally
       List<Van> unassignedVehicles = snapshot.docs
           .map((doc) => Van.fromFirestore(doc))
-          .where((vehicle) => 
-              vehicle.queuePosition > fullVanPosition && 
-              vehicle.status == 'in_queue' &&
-              (vehicle.currentRouteId == null || vehicle.currentRouteId!.isEmpty))
+          .where((vehicle) {
+            // Must be unassigned
+            if (vehicle.currentRouteId != null && vehicle.currentRouteId!.isNotEmpty) return false;
+            // Must be in queue
+            if (vehicle.status != 'in_queue') return false;
+            // Must be scheduled for today (empty schedule = operates all days)
+            if (vehicle.weeklySchedule.isNotEmpty && !vehicle.weeklySchedule.contains(currentDay)) return false;
+            // Get day-specific position
+            final dayPos = vehicle.dayQueuePositions[currentDay];
+            if (dayPos == null) return false;
+            return dayPos > fullVanPosition;
+          })
           .toList();
       
-      // Sort by queue position and get the first one (CRITICAL: Ensures proper queue order)
-      unassignedVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+      // Sort by day-specific queue position
+      unassignedVehicles.sort((a, b) {
+        final aPos = a.dayQueuePositions[currentDay] ?? 999999;
+        final bPos = b.dayQueuePositions[currentDay] ?? 999999;
+        return aPos.compareTo(bPos);
+      });
 
       if (unassignedVehicles.isNotEmpty) {
         Van nextVehicle = unassignedVehicles.first;
+        final nextPos = nextVehicle.dayQueuePositions[currentDay] ?? 0;
         
-        print('✅ Found next unassigned vehicle: ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) at position ${nextVehicle.queuePosition}');
+        print('✅ Found next unassigned vehicle: ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) at position $nextPos for $currentDay');
         
         // Update the next vehicle's status to boarding
         await _firestore.collection(_collection).doc(nextVehicle.id).update({
@@ -775,7 +904,7 @@ class VanService {
         
         print('🎯 General queue progressed: Vehicle ${nextVehicle.plateNumber} (${nextVehicle.vehicleType}) automatically updated from "in_queue" to "boarding"');
       } else {
-        print('⚠️ No more unassigned vehicles in queue after position $fullVanPosition');
+        print('⚠️ No more unassigned vehicles in queue after position $fullVanPosition for $currentDay');
         print('🔄 Implementing general queue loop - searching for first unassigned vehicle to cycle back');
         
         // LOOPING LOGIC: When no more unassigned vehicles in queue, cycle back to the first unassigned vehicle
@@ -792,25 +921,38 @@ class VanService {
     try {
       print('🔄 Starting general queue loop for unassigned vehicles');
       
+      // Get current day of week for filtering
+      final now = DateTime.now();
+      final dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      final currentDay = dayNames[now.weekday % 7];
+      
+      print('📅 Current day: $currentDay');
+      
       // Get all unassigned vehicles (both vans and buses)
       QuerySnapshot snapshot = await _firestore
           .collection(_collection)
           .get();
 
-      List<Van> unassignedVehicles = snapshot.docs
-          .map((doc) => Van.fromFirestore(doc))
-          .where((vehicle) => vehicle.currentRouteId == null || vehicle.currentRouteId!.isEmpty)
-          .toList();
-      
-      // Sort by queue position to find the first unassigned vehicle (CRITICAL: Position-based)
-      unassignedVehicles.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
-      
-      print('🔍 Found ${unassignedVehicles.length} unassigned vehicles');
-      
-      if (unassignedVehicles.isNotEmpty) {
-        Van firstUnassignedVehicle = unassignedVehicles.first;
+      // Find the unassigned vehicle at position 1 for today's queue
+      Van? firstUnassignedVehicle;
+      for (var doc in snapshot.docs) {
+        Van vehicle = Van.fromFirestore(doc);
         
-        print('🎯 First unassigned vehicle: ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) at position ${firstUnassignedVehicle.queuePosition} with status "${firstUnassignedVehicle.status}"');
+        // Must be unassigned
+        if (vehicle.currentRouteId != null && vehicle.currentRouteId!.isNotEmpty) continue;
+        
+        // Check if vehicle is scheduled for today
+        bool isScheduledToday = vehicle.weeklySchedule.isEmpty || vehicle.weeklySchedule.contains(currentDay);
+        
+        // Check if this vehicle is at position 1 for today
+        if (isScheduledToday && vehicle.dayQueuePositions[currentDay] == 1) {
+          firstUnassignedVehicle = vehicle;
+          break;
+        }
+      }
+      
+      if (firstUnassignedVehicle != null) {
+        print('🎯 Found unassigned vehicle at position 1 for $currentDay: ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) with status "${firstUnassignedVehicle.status}"');
         
         // Check if the first unassigned vehicle is full (indicating we've completed a cycle)
         if (firstUnassignedVehicle.status.toLowerCase() == 'full') {
@@ -834,7 +976,7 @@ class VanService {
           print('ℹ️ First unassigned vehicle ${firstUnassignedVehicle.plateNumber} (${firstUnassignedVehicle.vehicleType}) already has status "${firstUnassignedVehicle.status}" - no loop action needed');
         }
       } else {
-        print('⚠️ No unassigned vehicles found for general queue loop');
+        print('⚠️ No unassigned vehicle found at position 1 for $currentDay');
       }
     } catch (e) {
       print('❌ Error in general queue loop back: $e');
@@ -1160,6 +1302,207 @@ class VanService {
       }
     } catch (e) {
       print('Error during van status migration: $e');
+      rethrow;
+    }
+  }
+
+  // Day-specific queue position management
+  
+  /// Get the next available queue position for a specific day
+  Future<int> getNextQueuePositionForDay(String day) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection(_collection)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        return 1;
+      }
+
+      // Find the highest position for this day
+      int maxPosition = 0;
+      for (var doc in snapshot.docs) {
+        Van van = Van.fromFirestore(doc);
+        
+        // Only consider vans that are scheduled for this day
+        if (van.weeklySchedule.isEmpty || van.weeklySchedule.contains(day)) {
+          int dayPosition = van.dayQueuePositions[day] ?? 0;
+          if (dayPosition > maxPosition) {
+            maxPosition = dayPosition;
+          }
+        }
+      }
+
+      return maxPosition + 1;
+    } catch (e) {
+      print('Error getting next queue position for day $day: $e');
+      return 1;
+    }
+  }
+
+  /// Update day-specific queue positions when adding/removing days from a van's schedule
+  Future<void> updateDayQueuePositions(String vanId, List<String> newSchedule, List<String> oldSchedule) async {
+    try {
+      Van? van = await getVanById(vanId);
+      if (van == null) return;
+
+      Map<String, int> updatedPositions = Map.from(van.dayQueuePositions);
+
+      // Add positions for new days
+      for (String day in newSchedule) {
+        if (!oldSchedule.contains(day)) {
+          // Day was added, assign next available position
+          int nextPosition = await getNextQueuePositionForDay(day);
+          updatedPositions[day] = nextPosition;
+          print('Van ${van.plateNumber}: Assigned position $nextPosition for $day');
+        }
+      }
+
+      // Remove positions for removed days
+      for (String day in oldSchedule) {
+        if (!newSchedule.contains(day)) {
+          // Day was removed, remove its position
+          updatedPositions.remove(day);
+          print('Van ${van.plateNumber}: Removed position for $day');
+          
+          // Reorder remaining vans for this day
+          await _reorderDayQueueAfterRemoval(day, van.dayQueuePositions[day] ?? 0);
+        }
+      }
+
+      // Update the van with new positions
+      await updateVan(vanId, van.copyWith(
+        weeklySchedule: newSchedule,
+        dayQueuePositions: updatedPositions,
+      ));
+    } catch (e) {
+      print('Error updating day queue positions: $e');
+      rethrow;
+    }
+  }
+
+  /// Reorder queue positions for a specific day after a van is removed
+  Future<void> _reorderDayQueueAfterRemoval(String day, int removedPosition) async {
+    try {
+      if (removedPosition <= 0) return;
+
+      QuerySnapshot snapshot = await _firestore.collection(_collection).get();
+      WriteBatch batch = _firestore.batch();
+      int updatedCount = 0;
+
+      for (DocumentSnapshot doc in snapshot.docs) {
+        Van van = Van.fromFirestore(doc);
+        
+        // Only process vans scheduled for this day with higher positions
+        if ((van.weeklySchedule.isEmpty || van.weeklySchedule.contains(day)) &&
+            (van.dayQueuePositions[day] ?? 0) > removedPosition) {
+          
+          Map<String, int> updatedPositions = Map.from(van.dayQueuePositions);
+          updatedPositions[day] = updatedPositions[day]! - 1;
+          
+          batch.update(doc.reference, {'dayQueuePositions': updatedPositions});
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        await batch.commit();
+        print('Reordered $updatedCount vans for $day after position $removedPosition was removed');
+      }
+    } catch (e) {
+      print('Error reordering day queue: $e');
+    }
+  }
+
+  /// Check for and fix position conflicts on a specific day
+  Future<void> fixDayQueuePositions(String day) async {
+    try {
+      QuerySnapshot snapshot = await _firestore.collection(_collection).get();
+      
+      // Collect all vans for this day with their positions
+      List<Van> vansForDay = [];
+      for (var doc in snapshot.docs) {
+        Van van = Van.fromFirestore(doc);
+        if (van.weeklySchedule.isEmpty || van.weeklySchedule.contains(day)) {
+          vansForDay.add(van);
+        }
+      }
+
+      // Sort by their day-specific position (or general position if not set)
+      vansForDay.sort((a, b) {
+        int aPos = a.dayQueuePositions[day] ?? a.queuePosition;
+        int bPos = b.dayQueuePositions[day] ?? b.queuePosition;
+        return aPos.compareTo(bPos);
+      });
+
+      // Reassign sequential positions
+      WriteBatch batch = _firestore.batch();
+      for (int i = 0; i < vansForDay.length; i++) {
+        Van van = vansForDay[i];
+        Map<String, int> updatedPositions = Map.from(van.dayQueuePositions);
+        updatedPositions[day] = i + 1;
+
+        DocumentReference docRef = _firestore.collection(_collection).doc(van.id);
+        batch.update(docRef, {'dayQueuePositions': updatedPositions});
+      }
+
+      await batch.commit();
+      print('Fixed queue positions for $day: ${vansForDay.length} vans reordered');
+    } catch (e) {
+      print('Error fixing day queue positions for $day: $e');
+      rethrow;
+    }
+  }
+
+  /// Initialize day queue positions for existing vans that don't have them
+  Future<void> initializeDayQueuePositions() async {
+    try {
+      QuerySnapshot snapshot = await _firestore.collection(_collection).get();
+      WriteBatch batch = _firestore.batch();
+      int updatedCount = 0;
+
+      // Group vans by day
+      Map<String, List<Van>> vansByDay = {};
+      List<String> allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+      for (var doc in snapshot.docs) {
+        Van van = Van.fromFirestore(doc);
+        
+        // If van has empty schedule, it operates all days
+        List<String> operatingDays = van.weeklySchedule.isEmpty ? allDays : van.weeklySchedule;
+        
+        for (String day in operatingDays) {
+          vansByDay.putIfAbsent(day, () => []);
+          vansByDay[day]!.add(van);
+        }
+      }
+
+      // Assign positions for each day
+      for (String day in vansByDay.keys) {
+        List<Van> vans = vansByDay[day]!;
+        vans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+
+        for (int i = 0; i < vans.length; i++) {
+          Van van = vans[i];
+          
+          // Only update if this day doesn't have a position yet
+          if (!van.dayQueuePositions.containsKey(day)) {
+            Map<String, int> updatedPositions = Map.from(van.dayQueuePositions);
+            updatedPositions[day] = i + 1;
+
+            DocumentReference docRef = _firestore.collection(_collection).doc(van.id);
+            batch.update(docRef, {'dayQueuePositions': updatedPositions});
+            updatedCount++;
+          }
+        }
+      }
+
+      if (updatedCount > 0) {
+        await batch.commit();
+        print('Initialized day queue positions for $updatedCount van-day combinations');
+      }
+    } catch (e) {
+      print('Error initializing day queue positions: $e');
       rethrow;
     }
   }

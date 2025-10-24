@@ -48,6 +48,8 @@ class Van {
   final DateTime createdAt;
   final int currentOccupancy; // Add this field
   final String vehicleType; // 'van' or 'bus'
+  final List<String> weeklySchedule; // Days of week this vehicle operates: ['monday', 'tuesday', ...]
+  final Map<String, int> dayQueuePositions; // Queue position for each day: {'monday': 1, 'tuesday': 2, ...}
 
   Van({
     required this.id,
@@ -63,6 +65,8 @@ class Van {
     required this.createdAt,
     this.currentOccupancy = 0, // Default to 0
     this.vehicleType = 'van', // Default to van for backward compatibility
+    this.weeklySchedule = const [], // Default to no schedule (all days)
+    this.dayQueuePositions = const {}, // Default to empty map
   });
 
   // Comprehensive status mapping for admin-mobile compatibility
@@ -173,6 +177,12 @@ class Van {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       currentOccupancy: data['currentOccupancy'] ?? 0,
       vehicleType: data['vehicleType'] ?? 'van', // Default to van for backward compatibility
+      weeklySchedule: data['weeklySchedule'] != null 
+          ? List<String>.from(data['weeklySchedule']) 
+          : [], // Default to empty (all days)
+      dayQueuePositions: data['dayQueuePositions'] != null 
+          ? Map<String, int>.from(data['dayQueuePositions']) 
+          : {}, // Default to empty map
     );
   }
 
@@ -192,6 +202,8 @@ class Van {
       'createdAt': Timestamp.fromDate(createdAt),
       'currentOccupancy': currentOccupancy,
       'vehicleType': vehicleType,
+      'weeklySchedule': weeklySchedule,
+      'dayQueuePositions': dayQueuePositions,
     };
   }
 
@@ -209,6 +221,8 @@ class Van {
     DateTime? createdAt,
     int? currentOccupancy,
     String? vehicleType,
+    List<String>? weeklySchedule,
+    Map<String, int>? dayQueuePositions,
   }) {
     return Van(
       id: id ?? this.id,
@@ -224,6 +238,8 @@ class Van {
       createdAt: createdAt ?? this.createdAt,
       currentOccupancy: currentOccupancy ?? this.currentOccupancy,
       vehicleType: vehicleType ?? this.vehicleType,
+      weeklySchedule: weeklySchedule ?? this.weeklySchedule,
+      dayQueuePositions: dayQueuePositions ?? this.dayQueuePositions,
     );
   }
 }

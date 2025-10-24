@@ -15,17 +15,57 @@ class VanManagementScreen extends StatefulWidget {
   State<VanManagementScreen> createState() => _VanManagementScreenState();
 }
 
-class _VanManagementScreenState extends State<VanManagementScreen> {
+class _VanManagementScreenState extends State<VanManagementScreen> 
+    with SingleTickerProviderStateMixin {
   String _searchQuery = '';
   String _statusFilter = 'all';
+  
+  late TabController _tabController;
+  
+  // Days of the week for tabs
+  static const List<Map<String, String>> _weekDays = [
+    {'value': 'monday', 'label': 'Monday', 'short': 'MON'},
+    {'value': 'tuesday', 'label': 'Tuesday', 'short': 'TUE'},
+    {'value': 'wednesday', 'label': 'Wednesday', 'short': 'WED'},
+    {'value': 'thursday', 'label': 'Thursday', 'short': 'THU'},
+    {'value': 'friday', 'label': 'Friday', 'short': 'FRI'},
+    {'value': 'saturday', 'label': 'Saturday', 'short': 'SAT'},
+    {'value': 'sunday', 'label': 'Sunday', 'short': 'SUN'},
+  ];
+  
+  // Get current day index (0 = Monday, 6 = Sunday)
+  int _getCurrentDayIndex() {
+    final now = DateTime.now();
+    // DateTime.weekday returns 1-7 (Monday-Sunday), convert to 0-6
+    return now.weekday - 1;
+  }
+  
+  String get _selectedDay => _weekDays[_tabController.index]['value']!;
 
   @override
   void initState() {
     super.initState();
+    // Initialize TabController with current day
+    _tabController = TabController(
+      length: _weekDays.length,
+      vsync: this,
+      initialIndex: _getCurrentDayIndex(),
+    );
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {}); // Rebuild when tab changes
+      }
+    });
     // Debug van data after a short delay to let providers initialize
     Future.delayed(Duration(seconds: 2), () {
       _debugVanData();
     });
+  }
+  
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   // Update all van statuses based on current occupancy
@@ -336,6 +376,86 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     }
   }
 
+  // Initialize day-specific queue positions for all vehicles
+  Future<void> _initializeDayQueuePositions() async {
+    try {
+      // Show confirmation dialog
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.calendar_month, color: Colors.blue[700]),
+                const SizedBox(width: AppConstants.smallPadding),
+                const Expanded(child: Text('Initialize Day Queue Positions')),
+              ],
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This will assign day-specific queue positions to all vehicles based on their weekly schedules.'),
+                SizedBox(height: AppConstants.smallPadding),
+                Text('• Vehicles with no schedule will get positions for all days'),
+                Text('• Existing day positions will be preserved'),
+                Text('• New positions will be assigned sequentially'),
+                SizedBox(height: AppConstants.smallPadding),
+                Text('This is safe and recommended for the new day-based queue system.'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.check),
+                label: const Text('Initialize'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Initializing day-specific queue positions...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+
+      final vanService = VanService();
+      await vanService.initializeDayQueuePositions();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Day-specific queue positions initialized successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing day positions: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -357,26 +477,7 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Fleet Management',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: AppConstants.smallPadding),
-              Text(
-                'Manage your fleet of vans and buses - track their status and performance',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-            ],
-          ),
-        ),
+        
         Wrap(
           spacing: AppConstants.smallPadding,
           runSpacing: AppConstants.smallPadding,
@@ -442,6 +543,14 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                 foregroundColor: Colors.red,
               ),
             ),
+            OutlinedButton.icon(
+              onPressed: _initializeDayQueuePositions,
+              icon: const Icon(Icons.calendar_month),
+              label: const Text('Initialize Day Positions'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue,
+              ),
+            ),
           ],
         ),
       ],
@@ -449,48 +558,152 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
   }
 
   Widget _buildFilters() {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          flex: 3,
-          child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Search vehicles by plate number or driver name...',
-              prefixIcon: Icon(Icons.search),
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Search vehicles by plate number or driver name...',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
             ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-          ),
+            const SizedBox(width: AppConstants.defaultPadding),
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                value: _statusFilter,
+                decoration: const InputDecoration(
+                  labelText: 'Status Filter',
+                  prefixIcon: Icon(Icons.filter_list),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All Status')),
+                  DropdownMenuItem(value: 'boarding', child: Text('Boarding')),
+                  DropdownMenuItem(
+                      value: 'in_queue', child: Text('In Queue (Ready)')),
+                  DropdownMenuItem(value: 'full', child: Text('Full')), // Add full filter
+                  DropdownMenuItem(
+                      value: 'maintenance', child: Text('Maintenance')),
+                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _statusFilter = value;
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: AppConstants.defaultPadding),
-        Expanded(
-          flex: 2,
-          child: DropdownButtonFormField<String>(
-            value: _statusFilter,
-            decoration: const InputDecoration(
-              labelText: 'Status Filter',
-              prefixIcon: Icon(Icons.filter_list),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All Status')),
-              DropdownMenuItem(value: 'boarding', child: Text('Boarding')),
-              DropdownMenuItem(
-                  value: 'in_queue', child: Text('In Queue (Ready)')),
-              DropdownMenuItem(value: 'full', child: Text('Full')), // Add full filter
-              DropdownMenuItem(
-                  value: 'maintenance', child: Text('Maintenance')),
-              DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+        const SizedBox(height: AppConstants.defaultPadding),
+        // Day-based TabBar Navigation
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+            border: Border.all(color: Colors.grey[300]!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
             ],
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _statusFilter = value;
-                });
-              }
-            },
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: AppConstants.smallPadding),
+                    Text(
+                      'Weekly Schedule',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[900],
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Today: ${_weekDays[_getCurrentDayIndex()]['label']}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue[900],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // TabBar
+              TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                labelColor: Colors.blue[700],
+                unselectedLabelColor: Colors.grey[600],
+                indicatorColor: Colors.blue[700],
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                ),
+                tabs: _weekDays.map((day) {
+                  final isToday = _weekDays.indexOf(day) == _getCurrentDayIndex();
+                  return Tab(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(day['short']!),
+                          if (isToday)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.blue[700],
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
         ),
       ],
@@ -521,12 +734,47 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
               filteredVans.where((van) => van.status == _statusFilter).toList();
         }
 
-        // CRITICAL: Always sort by queue position to ensure correct display order
-        filteredVans.sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+        // Apply day filter based on selected tab
+        final selectedDay = _selectedDay;
+        filteredVans = filteredVans.where((van) {
+          // If weeklySchedule is empty, it means the vehicle operates all days
+          if (van.weeklySchedule.isEmpty) return true;
+          // Otherwise check if the selected day is in the schedule
+          return van.weeklySchedule.contains(selectedDay);
+        }).toList();
+
+        // CRITICAL: Sort by day-specific queue position for the selected day
+        filteredVans.sort((a, b) {
+          final aPosition = a.dayQueuePositions[selectedDay] ?? a.queuePosition;
+          final bPosition = b.dayQueuePositions[selectedDay] ?? b.queuePosition;
+          return aPosition.compareTo(bPosition);
+        });
 
         if (filteredVans.isEmpty) {
-          return const Center(
-            child: Text('No vehicles found matching your criteria'),
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: AppConstants.defaultPadding),
+                Text(
+                  'No vehicles scheduled for ${_weekDays[_tabController.index]['label']}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: AppConstants.smallPadding),
+                Text(
+                  'Use the "Weekly Schedule" option in the vehicle menu to add vehicles to this day',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           );
         }
 
@@ -628,7 +876,27 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                   const SizedBox(height: AppConstants.smallPadding),
                   Text('Driver: ${van.driver.name}'),
                   Text('Capacity: ${van.capacity} seats'),
-                  Text('Queue Position: #${van.queuePosition}'),
+                  Row(
+                    children: [
+                      Text('Queue Position: #${van.dayQueuePositions[_selectedDay] ?? van.queuePosition}'),
+                      const SizedBox(width: AppConstants.smallPadding),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _weekDays[_tabController.index]['short']!,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple[900],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   // Occupancy display with visual indicator
                   Row(
                     children: [
@@ -685,9 +953,42 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                  // Weekly Schedule Display
+                  const SizedBox(height: AppConstants.smallPadding),
+                  _buildScheduleChips(van.weeklySchedule),
                 ],
               ),
             ),
+
+            // Queue Position Controls
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                  onPressed: () => _moveVanUpInQueue(van),
+                  tooltip: 'Move Up',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  color: Colors.blue,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                  onPressed: () => _moveVanDownInQueue(van),
+                  tooltip: 'Move Down',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  color: Colors.blue,
+                ),
+              ],
+            ),
+            const SizedBox(width: AppConstants.smallPadding),
 
             // Actions
             PopupMenuButton<String>(
@@ -696,6 +997,14 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 const PopupMenuItem(
                     value: 'assign_route', child: Text('Route & Status')),
+                const PopupMenuItem(
+                    value: 'weekly_schedule', child: Row(
+                      children: [
+                        Icon(Icons.calendar_today, size: 16),
+                        SizedBox(width: 8),
+                        Text('Weekly Schedule'),
+                      ],
+                    )),
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                     value: 'move_up', child: Text('Move Up in Queue')),
@@ -762,6 +1071,108 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     }
   }
 
+  Widget _buildScheduleChips(List<String> schedule) {
+    if (schedule.isEmpty) {
+      return Row(
+        children: [
+          Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+          const SizedBox(width: 4),
+          Text(
+            'Schedule: All Days',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        Icon(Icons.calendar_today, size: 14, color: Colors.blue[700]),
+        const SizedBox(width: 4),
+        ...schedule.map((day) {
+          // Get short day name (first 3 letters)
+          final shortDay = day.substring(0, 3).toUpperCase();
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.blue[100],
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.blue[300]!),
+            ),
+            child: Text(
+              shortDay,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue[900],
+              ),
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  // Move van up in queue (day-aware)
+  Future<void> _moveVanUpInQueue(Van van) async {
+    final vanProvider = Provider.of<VanProvider>(context, listen: false);
+    try {
+      await vanProvider.moveVanUpByDay(van.id, _selectedDay);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${van.plateNumber} moved up in queue for ${_weekDays[_tabController.index]['label']}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error moving van: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // Move van down in queue (day-aware)
+  Future<void> _moveVanDownInQueue(Van van) async {
+    final vanProvider = Provider.of<VanProvider>(context, listen: false);
+    try {
+      await vanProvider.moveVanDownByDay(van.id, _selectedDay);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${van.plateNumber} moved down in queue for ${_weekDays[_tabController.index]['label']}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error moving van: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   void _handleVanAction(String action, Van van) {
     final vanProvider = Provider.of<VanProvider>(context, listen: false);
 
@@ -771,6 +1182,9 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
         break;
       case 'assign_route':
         _showRouteAssignmentDialog(van);
+        break;
+      case 'weekly_schedule':
+        _showWeeklyScheduleDialog(van);
         break;
       case 'move_up':
         vanProvider.moveVanToNext(van.id);
@@ -843,6 +1257,13 @@ class _VanManagementScreenState extends State<VanManagementScreen> {
     showDialog(
       context: context,
       builder: (context) => RouteAssignmentDialog(van: van),
+    );
+  }
+
+  void _showWeeklyScheduleDialog(Van van) {
+    showDialog(
+      context: context,
+      builder: (context) => WeeklyScheduleDialog(van: van),
     );
   }
 
@@ -1258,13 +1679,23 @@ class _AddVanDialogState extends State<AddVanDialog> {
   final _plateNumberController = TextEditingController();
   late TextEditingController _capacityController;
   final _driverNameController = TextEditingController();
-  final _driverLicenseController = TextEditingController();
   final _driverContactController = TextEditingController();
 
   String _selectedStatus = 'in_queue'; // Default to in queue status
   String? _selectedRouteId; // Route selection
   bool _isLoading = false;
   List<route_model.Route> _availableRoutes = [];
+  Set<String> _selectedDays = {}; // Weekly schedule selection
+
+  final List<Map<String, String>> _daysOfWeek = const [
+    {'value': 'monday', 'label': 'Monday', 'short': 'MON'},
+    {'value': 'tuesday', 'label': 'Tuesday', 'short': 'TUE'},
+    {'value': 'wednesday', 'label': 'Wednesday', 'short': 'WED'},
+    {'value': 'thursday', 'label': 'Thursday', 'short': 'THU'},
+    {'value': 'friday', 'label': 'Friday', 'short': 'FRI'},
+    {'value': 'saturday', 'label': 'Saturday', 'short': 'SAT'},
+    {'value': 'sunday', 'label': 'Sunday', 'short': 'SUN'},
+  ];
 
   @override
   void initState() {
@@ -1296,7 +1727,6 @@ class _AddVanDialogState extends State<AddVanDialog> {
     _plateNumberController.dispose();
     _capacityController.dispose();
     _driverNameController.dispose();
-    _driverLicenseController.dispose();
     _driverContactController.dispose();
     super.dispose();
   }
@@ -1444,27 +1874,6 @@ class _AddVanDialogState extends State<AddVanDialog> {
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
 
-                      // Driver License
-                      TextFormField(
-                        controller: _driverLicenseController,
-                        decoration: const InputDecoration(
-                          labelText: 'Driver License Number *',
-                          hintText: 'Enter driver license number',
-                          prefixIcon: Icon(Icons.credit_card),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Driver license is required';
-                          }
-                          if (value.trim().length < 5) {
-                            return 'License number must be at least 5 characters';
-                          }
-                          return null;
-                        },
-                        textCapitalization: TextCapitalization.characters,
-                      ),
-                      const SizedBox(height: AppConstants.defaultPadding),
-
                       // Driver Contact
                       TextFormField(
                         controller: _driverContactController,
@@ -1483,6 +1892,101 @@ class _AddVanDialogState extends State<AddVanDialog> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: AppConstants.largePadding),
+
+                      // Weekly Schedule Section
+                      Text(
+                        'Weekly Schedule',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: AppConstants.smallPadding),
+                      Container(
+                        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                          border: Border.all(color: Colors.blue[200]!),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Leave empty to operate all days',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue[900]),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () => setState(() => _selectedDays = _daysOfWeek.map((d) => d['value']!).toSet()),
+                                  icon: const Icon(Icons.select_all, size: 16),
+                                  label: const Text('All'),
+                                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => setState(() => _selectedDays = {'monday', 'tuesday', 'wednesday', 'thursday', 'friday'}),
+                                  icon: const Icon(Icons.work, size: 16),
+                                  label: const Text('Weekdays'),
+                                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => setState(() => _selectedDays.clear()),
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  label: const Text('Clear'),
+                                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _daysOfWeek.map((day) {
+                                final isSelected = _selectedDays.contains(day['value']);
+                                return FilterChip(
+                                  label: Text(day['short']!),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedDays.add(day['value']!);
+                                      } else {
+                                        _selectedDays.remove(day['value']!);
+                                      }
+                                    });
+                                  },
+                                  selectedColor: Colors.blue[600],
+                                  checkmarkColor: Colors.white,
+                                  labelStyle: TextStyle(
+                                    color: isSelected ? Colors.white : Colors.blue[700],
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            if (_selectedDays.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  '${_selectedDays.length} day(s) selected',
+                                  style: TextStyle(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
 
@@ -1666,7 +2170,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
       final driver = Driver(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: _driverNameController.text.trim(),
-        license: _driverLicenseController.text.trim(),
+        license: 'N/A', // Not collecting license anymore
         contact: _driverContactController.text.trim(),
       );
 
@@ -1684,6 +2188,7 @@ class _AddVanDialogState extends State<AddVanDialog> {
         createdAt: DateTime.now(),
         currentOccupancy: 0, // Initialize with 0 occupancy
         vehicleType: widget.vehicleType, // Set vehicle type (van or bus)
+        weeklySchedule: _selectedDays.toList(), // Set weekly schedule
       );
 
       // Add the van
@@ -2770,8 +3275,27 @@ class _QueueManagementDialogState extends State<QueueManagementDialog> {
 
   Future<void> _updateQueuePosition(Van van, int newPosition) async {
     try {
-      final updatedVan = van.copyWith(queuePosition: newPosition);
-      await _vanService.updateVan(van.id, updatedVan);
+      final oldPosition = van.queuePosition;
+      
+      // Find the van at the target position
+      final targetVan = _vansOnRoute.firstWhere(
+        (v) => v.queuePosition == newPosition,
+        orElse: () => van,
+      );
+      
+      // Swap positions
+      if (targetVan.id != van.id) {
+        // Update both vans simultaneously
+        final updatedCurrentVan = van.copyWith(queuePosition: newPosition);
+        final updatedTargetVan = targetVan.copyWith(queuePosition: oldPosition);
+        
+        await _vanService.updateVan(van.id, updatedCurrentVan);
+        await _vanService.updateVan(targetVan.id, updatedTargetVan);
+      } else {
+        // Just update the single van if no swap needed
+        final updatedVan = van.copyWith(queuePosition: newPosition);
+        await _vanService.updateVan(van.id, updatedVan);
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3198,3 +3722,372 @@ class _OccupancyAdjustmentDialogState extends State<OccupancyAdjustmentDialog> {
     );
   }
 }
+
+// Weekly Schedule Dialog
+class WeeklyScheduleDialog extends StatefulWidget {
+  final Van van;
+
+  const WeeklyScheduleDialog({super.key, required this.van});
+
+  @override
+  State<WeeklyScheduleDialog> createState() => _WeeklyScheduleDialogState();
+}
+
+class _WeeklyScheduleDialogState extends State<WeeklyScheduleDialog> {
+  final VanService _vanService = VanService();
+  late Set<String> _selectedDays;
+  bool _isLoading = false;
+
+  final List<Map<String, String>> _daysOfWeek = const [
+    {'value': 'monday', 'label': 'Monday', 'short': 'MON'},
+    {'value': 'tuesday', 'label': 'Tuesday', 'short': 'TUE'},
+    {'value': 'wednesday', 'label': 'Wednesday', 'short': 'WED'},
+    {'value': 'thursday', 'label': 'Thursday', 'short': 'THU'},
+    {'value': 'friday', 'label': 'Friday', 'short': 'FRI'},
+    {'value': 'saturday', 'label': 'Saturday', 'short': 'SAT'},
+    {'value': 'sunday', 'label': 'Sunday', 'short': 'SUN'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with current schedule
+    _selectedDays = Set<String>.from(widget.van.weeklySchedule);
+  }
+
+  Future<void> _updateSchedule() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Get old schedule for comparison
+      List<String> oldSchedule = widget.van.weeklySchedule;
+      List<String> newSchedule = _selectedDays.toList();
+
+      // Update day-specific queue positions
+      await _vanService.updateDayQueuePositions(
+        widget.van.id,
+        newSchedule,
+        oldSchedule,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        
+        // Show detailed feedback
+        String message;
+        if (newSchedule.isEmpty) {
+          message = 'Vehicle ${widget.van.plateNumber} now operates all days with assigned queue positions';
+        } else {
+          List<String> addedDays = newSchedule.where((d) => !oldSchedule.contains(d)).toList();
+          List<String> removedDays = oldSchedule.where((d) => !newSchedule.contains(d)).toList();
+          
+          if (addedDays.isNotEmpty && removedDays.isNotEmpty) {
+            message = 'Schedule updated for ${widget.van.plateNumber}\nAdded: ${addedDays.join(", ")}\nRemoved: ${removedDays.join(", ")}';
+          } else if (addedDays.isNotEmpty) {
+            message = 'Added ${widget.van.plateNumber} to: ${addedDays.join(", ")}';
+          } else if (removedDays.isNotEmpty) {
+            message = 'Removed ${widget.van.plateNumber} from: ${removedDays.join(", ")}';
+          } else {
+            message = 'Schedule updated for ${widget.van.plateNumber}';
+          }
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating schedule: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: 600,
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(Icons.calendar_today, color: Theme.of(context).primaryColor),
+                const SizedBox(width: AppConstants.smallPadding),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Weekly Schedule',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      Text(
+                        widget.van.plateNumber,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            // Info banner
+            Container(
+              padding: const EdgeInsets.all(AppConstants.smallPadding),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                  const SizedBox(width: AppConstants.smallPadding),
+                  Expanded(
+                    child: Text(
+                      'Select the days this vehicle operates. Leave empty to operate all days.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            // Current schedule display
+            if (_selectedDays.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(AppConstants.smallPadding),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                  border: Border.all(color: Colors.green[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+                    const SizedBox(width: AppConstants.smallPadding),
+                    const Text(
+                      'Operating all days of the week',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(AppConstants.smallPadding),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_available, color: Colors.orange[700], size: 20),
+                    const SizedBox(width: AppConstants.smallPadding),
+                    Text(
+                      'Operating ${_selectedDays.length} day(s) per week',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            // Quick select buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDays = _daysOfWeek
+                            .map((day) => day['value']!)
+                            .toSet();
+                      });
+                    },
+                    icon: const Icon(Icons.select_all, size: 16),
+                    label: const Text('All Days'),
+                  ),
+                ),
+                const SizedBox(width: AppConstants.smallPadding),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDays = _daysOfWeek
+                            .take(5) // Monday to Friday
+                            .map((day) => day['value']!)
+                            .toSet();
+                      });
+                    },
+                    icon: const Icon(Icons.business_center, size: 16),
+                    label: const Text('Weekdays'),
+                  ),
+                ),
+                const SizedBox(width: AppConstants.smallPadding),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDays = _daysOfWeek
+                            .skip(5) // Saturday and Sunday
+                            .map((day) => day['value']!)
+                            .toSet();
+                      });
+                    },
+                    icon: const Icon(Icons.weekend, size: 16),
+                    label: const Text('Weekend'),
+                  ),
+                ),
+                const SizedBox(width: AppConstants.smallPadding),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDays.clear();
+                      });
+                    },
+                    icon: const Icon(Icons.clear_all, size: 16),
+                    label: const Text('Clear'),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            // Day selection grid
+            GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: _daysOfWeek.length,
+              itemBuilder: (context, index) {
+                final day = _daysOfWeek[index];
+                final isSelected = _selectedDays.contains(day['value']);
+
+                return InkWell(
+                  onTap: _isLoading
+                      ? null
+                      : () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedDays.remove(day['value']);
+                            } else {
+                              _selectedDays.add(day['value']!);
+                            }
+                          });
+                        },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue[600] : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                      border: Border.all(
+                        color: isSelected ? Colors.blue[800]! : Colors.grey[400]!,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          day['short']!,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isSelected ? Colors.white : Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          day['label']!,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected ? Colors.white : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: AppConstants.largePadding),
+
+            // Actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: AppConstants.smallPadding),
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _updateSchedule,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(_isLoading ? 'Saving...' : 'Save Schedule'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

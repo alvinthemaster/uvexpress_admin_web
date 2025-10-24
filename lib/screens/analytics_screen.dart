@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../services/booking_service.dart';
 import '../services/van_service.dart';
 import '../models/van_model.dart';
+import '../models/booking_model.dart';
 import '../providers/van_provider.dart';
 import '../utils/constants.dart';
 
@@ -15,22 +19,43 @@ class AnalyticsScreen extends StatefulWidget {
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
+class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProviderStateMixin {
   final BookingService _bookingService = BookingService();
   final VanService _vanService = VanService();
   
+  late TabController _tabController;
   String _selectedPeriod = 'week';
   DateTime _selectedDate = DateTime.now();
   Map<String, dynamic> _statistics = {};
   Map<int, int> _hourlyDistribution = {};
   bool _isLoading = true;
 
+  // Trip History filters
+  DateTime? _tripHistoryStartDate;
+  DateTime? _tripHistoryEndDate;
+  String? _selectedVehicleFilter;
+  String? _selectedRouteFilter;
+  List<Map<String, dynamic>> _completedTrips = [];
+  bool _isLoadingTrips = false;
+
   final List<String> _periodOptions = ['day', 'week', 'month', 'year'];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.index == 1 && _completedTrips.isEmpty) {
+        _loadTripHistory();
+      }
+    });
     _loadAnalytics();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAnalytics() async {
@@ -72,6 +97,105 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
   }
 
+  Future<void> _loadTripHistory() async {
+    setState(() {
+      _isLoadingTrips = true;
+    });
+
+    try {
+      // Note: We'll use StreamBuilder in the UI instead of loading here
+      // This method just sets the loading state
+      setState(() {
+        _isLoadingTrips = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingTrips = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading trip history: $e')),
+        );
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _buildTripList(List<Booking> bookings, List<Van> vans) {
+    final vanMap = {for (var van in vans) van.plateNumber: van};
+
+    // Group bookings by trip (van + departure time + route)
+    Map<String, List<Booking>> tripGroups = {};
+    
+    for (var booking in bookings) {
+      // Only include completed trips
+      if (booking.bookingStatus.toLowerCase() == 'completed' && booking.vanPlateNumber != null) {
+        // Create a unique trip key: vanPlate_date_route
+        final tripDate = DateFormat('yyyy-MM-dd').format(booking.departureTime);
+        final tripKey = '${booking.vanPlateNumber}_${tripDate}_${booking.routeId}';
+        
+        if (!tripGroups.containsKey(tripKey)) {
+          tripGroups[tripKey] = [];
+        }
+        tripGroups[tripKey]!.add(booking);
+      }
+    }
+
+    // Convert to trip records
+    List<Map<String, dynamic>> trips = [];
+    tripGroups.forEach((tripKey, tripBookings) {
+      if (tripBookings.isNotEmpty) {
+        final firstBooking = tripBookings.first;
+        final van = vanMap[firstBooking.vanPlateNumber];
+        
+        trips.add({
+          'tripId': tripKey,
+          'vanPlateNumber': firstBooking.vanPlateNumber,
+          'vanName': firstBooking.vanPlateNumber ?? 'Unknown Vehicle',
+          'vehicleType': van?.vehicleType ?? 'van',
+          'routeId': firstBooking.routeId,
+          'routeName': firstBooking.routeName,
+          'origin': firstBooking.origin,
+          'destination': firstBooking.destination,
+          'departureTime': firstBooking.departureTime,
+          'totalPassengers': tripBookings.length,
+          'bookings': tripBookings,
+        });
+      }
+    });
+
+    // Sort by departure time (most recent first)
+    trips.sort((a, b) => (b['departureTime'] as DateTime).compareTo(a['departureTime'] as DateTime));
+
+    // Apply filters
+    return _applyTripFilters(trips);
+  }
+
+  List<Map<String, dynamic>> _applyTripFilters(List<Map<String, dynamic>> trips) {
+    return trips.where((trip) {
+      // Date range filter
+      if (_tripHistoryStartDate != null) {
+        final tripDate = trip['departureTime'] as DateTime;
+        if (tripDate.isBefore(_tripHistoryStartDate!)) return false;
+      }
+      if (_tripHistoryEndDate != null) {
+        final tripDate = trip['departureTime'] as DateTime;
+        if (tripDate.isAfter(_tripHistoryEndDate!.add(const Duration(days: 1)))) return false;
+      }
+
+      // Vehicle filter
+      if (_selectedVehicleFilter != null && _selectedVehicleFilter!.isNotEmpty) {
+        if (trip['vanPlateNumber'] != _selectedVehicleFilter) return false;
+      }
+
+      // Route filter
+      if (_selectedRouteFilter != null && _selectedRouteFilter!.isNotEmpty) {
+        if (trip['routeId'] != _selectedRouteFilter) return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
   DateTimeRange _getDateRange() {
     final now = _selectedDate;
     
@@ -108,21 +232,46 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(AppConstants.defaultPadding),
-        child: Column(
-          children: [
-            _buildHeader(),
-            const SizedBox(height: AppConstants.defaultPadding),
-            _buildPeriodSelector(),
-            const SizedBox(height: AppConstants.defaultPadding),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildAnalytics(),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            child: _buildHeader(),
+          ),
+          TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
+              Tab(icon: Icon(Icons.history), text: 'Trip History'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildAnalyticsTab(),
+                _buildTripHistoryTab(),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsTab() {
+    return Padding(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      child: Column(
+        children: [
+          _buildPeriodSelector(),
+          const SizedBox(height: AppConstants.defaultPadding),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildAnalytics(),
+          ),
+        ],
       ),
     );
   }
@@ -444,99 +593,114 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   Widget _buildUserRegistrationChart() {
-    final List<BarChartGroupData> barGroups = [
-      BarChartGroupData(
-        x: 0,
-        barRods: [
-          BarChartRodData(
-            toY: _statistics['totalUsers']?.toDouble() ?? 0.0,
-            color: Colors.blue,
-            width: 20,
-            borderRadius: BorderRadius.circular(4),
+    final totalUsers = _statistics['totalUsers']?.toDouble() ?? 0.0;
+    final activeVans = _statistics['activeVans']?.toDouble() ?? 0.0;
+    final newUsersToday = _statistics['newUsersToday']?.toDouble() ?? 0.0;
+    
+    final total = totalUsers + activeVans + newUsersToday;
+    
+    if (total == 0) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text(
+            'No data available',
+            style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
-        ],
+        ),
+      );
+    }
+
+    final List<PieChartSectionData> sections = [
+      PieChartSectionData(
+        value: totalUsers,
+        title: '${totalUsers.toInt()}',
+        color: Colors.blue,
+        radius: 80,
+        titleStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        badgeWidget: null,
       ),
-      BarChartGroupData(
-        x: 1,
-        barRods: [
-          BarChartRodData(
-            toY: _statistics['activeVans']?.toDouble() ?? 0.0,
-            color: Colors.green,
-            width: 20,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
+      PieChartSectionData(
+        value: activeVans,
+        title: '${activeVans.toInt()}',
+        color: Colors.green,
+        radius: 80,
+        titleStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
       ),
-      BarChartGroupData(
-        x: 2,
-        barRods: [
-          BarChartRodData(
-            toY: _statistics['newUsersToday']?.toDouble() ?? 0.0,
-            color: Colors.orange,
-            width: 20,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
+      PieChartSectionData(
+        value: newUsersToday,
+        title: '${newUsersToday.toInt()}',
+        color: Colors.orange,
+        radius: 80,
+        titleStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
       ),
     ];
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: (_statistics['totalUsers']?.toDouble() ?? 100.0) * 1.2,
-        barGroups: barGroups,
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 40,
-              getTitlesWidget: (value, meta) {
-                return Text(
-                  '${value.toInt()}',
-                  style: const TextStyle(fontSize: 11),
-                );
-              },
+    return Column(
+      children: [
+        Expanded(
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              centerSpaceRadius: 40,
+              sectionsSpace: 2,
+              pieTouchData: PieTouchData(
+                touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                  // Optional: Add touch interaction
+                },
+              ),
             ),
           ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 48, // Increased to accommodate multiline text
-              getTitlesWidget: (value, meta) {
-                String label = '';
-                switch (value.toInt()) {
-                  case 0:
-                    label = 'Total\nUsers';
-                    break;
-                  case 1:
-                    label = 'Active\nVans';
-                    break;
-                  case 2:
-                    label = 'New\nToday';
-                    break;
-                  default:
-                    return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        borderData: FlBorderData(show: false),
-        gridData: const FlGridData(show: false),
-      ),
+        const SizedBox(height: 16),
+        // Legend
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _buildLegendItem('Total Users', Colors.blue, totalUsers.toInt()),
+            _buildLegendItem('Active Vans', Colors.green, activeVans.toInt()),
+            _buildLegendItem('New Today', Colors.orange, newUsersToday.toInt()),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color, int value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label: $value',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -828,10 +992,1523 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
   }
 
-  void _exportReport() {
-    // TODO: Implement PDF/Excel export functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Export functionality coming soon')),
+  // ==================== TRIP HISTORY TAB ====================
+
+  Widget _buildTripHistoryTab() {
+    return Padding(
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      child: Column(
+        children: [
+          _buildTripHistoryFilters(),
+          const SizedBox(height: AppConstants.defaultPadding),
+          Expanded(
+            child: _buildTripHistoryList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTripHistoryFilters() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Filters',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _tripHistoryStartDate = null;
+                      _tripHistoryEndDate = null;
+                      _selectedVehicleFilter = null;
+                      _selectedRouteFilter = null;
+                    });
+                  },
+                  icon: const Icon(Icons.clear_all),
+                  label: const Text('Clear Filters'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final DateTimeRange? picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now(),
+                        initialDateRange: _tripHistoryStartDate != null && _tripHistoryEndDate != null
+                            ? DateTimeRange(start: _tripHistoryStartDate!, end: _tripHistoryEndDate!)
+                            : null,
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _tripHistoryStartDate = picked.start;
+                          _tripHistoryEndDate = picked.end;
+                        });
+                      }
+                    },
+                    icon: const Icon(Icons.date_range),
+                    label: Text(
+                      _tripHistoryStartDate != null && _tripHistoryEndDate != null
+                          ? '${DateFormat('MMM dd').format(_tripHistoryStartDate!)} - ${DateFormat('MMM dd, yyyy').format(_tripHistoryEndDate!)}'
+                          : 'Select Date Range',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppConstants.defaultPadding),
+                Expanded(
+                  child: StreamBuilder<List<Van>>(
+                    stream: _vanService.getVansStream(),
+                    builder: (context, snapshot) {
+                      final vans = snapshot.data ?? [];
+                      return DropdownButtonFormField<String?>(
+                        value: _selectedVehicleFilter,
+                        decoration: const InputDecoration(
+                          labelText: 'Filter by Vehicle',
+                          prefixIcon: Icon(Icons.local_shipping),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('All Vehicles')),
+                          ...vans.map((van) => DropdownMenuItem(
+                            value: van.plateNumber,
+                            child: Text('${van.plateNumber} (${van.vehicleType})'),
+                          )),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedVehicleFilter = value;
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppConstants.defaultPadding),
+                Expanded(
+                  child: TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Filter by Route',
+                      prefixIcon: Icon(Icons.route),
+                      hintText: 'Enter route name',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedRouteFilter = value.isEmpty ? null : value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripHistoryList() {
+    return StreamBuilder<List<Booking>>(
+      stream: _bookingService.getBookingsStream(),
+      builder: (context, bookingSnapshot) {
+        if (bookingSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!bookingSnapshot.hasData || bookingSnapshot.data!.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.history, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('No trip history available', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          );
+        }
+
+        return StreamBuilder<List<Van>>(
+          stream: _vanService.getVansStream(),
+          builder: (context, vanSnapshot) {
+            if (!vanSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final trips = _buildTripList(bookingSnapshot.data!, vanSnapshot.data!);
+
+            if (trips.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.filter_list_off, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text('No trips match the selected filters', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              );
+            }
+
+            return Card(
+              child: ListView.separated(
+                itemCount: trips.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final trip = trips[index];
+                  return _buildTripListItem(trip);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTripListItem(Map<String, dynamic> trip) {
+    final vehicleIcon = trip['vehicleType'] == 'bus' ? Icons.directions_bus : Icons.local_shipping;
+    final departureTime = trip['departureTime'] as DateTime;
+    final bookings = trip['bookings'] as List<Booking>;
+
+    return ExpansionTile(
+      leading: CircleAvatar(
+        backgroundColor: Colors.blue.withOpacity(0.1),
+        child: Icon(vehicleIcon, color: Colors.blue),
+      ),
+      title: Row(
+        children: [
+          Text(
+            trip['vanName'],
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green),
+            ),
+            child: Text(
+              trip['vehicleType'].toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.route, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '${trip['origin']} → ${trip['destination']}',
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              const Icon(Icons.schedule, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                DateFormat('MMM dd, yyyy • hh:mm a').format(departureTime),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.people, size: 16, color: Colors.orange),
+            const SizedBox(width: 4),
+            Text(
+              '${trip['totalPassengers']}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+          ],
+        ),
+      ),
+      children: [
+        Container(
+          color: Colors.grey[50],
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Booking Summary Section
+              _buildBookingSummary(bookings),
+              const SizedBox(height: AppConstants.largePadding),
+              
+              // Passenger Details by Status
+              _buildPassengersByStatus(bookings),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookingSummary(List<Booking> bookings) {
+    // Calculate summary statistics
+    final confirmedCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'confirmed').length;
+    final activeCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'active').length;
+    final completedCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'completed').length;
+    final cancelledCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'cancelled').length;
+    
+    final totalRevenue = bookings.where((b) => b.paymentStatus == 'paid').fold<double>(0, (sum, b) => sum + b.totalAmount);
+    final pendingRevenue = bookings.where((b) => b.paymentStatus == 'pending').fold<double>(0, (sum, b) => sum + b.totalAmount);
+    final totalDiscount = bookings.fold<double>(0, (sum, b) => sum + b.discountAmount);
+    
+    final totalSeats = bookings.fold<int>(0, (sum, b) => sum + b.numberOfSeats);
+    
+    return Card(
+      elevation: 2,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.summarize, color: Colors.blue[700]),
+                const SizedBox(width: 8),
+                Text(
+                  'Booking Summary',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[700],
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () => _exportToPdf(bookings),
+                  icon: const Icon(Icons.picture_as_pdf, size: 18),
+                  label: const Text('Export PDF'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[700],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            
+            // Status Breakdown
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSummaryItem(
+                    'Confirmed',
+                    confirmedCount.toString(),
+                    Icons.check_circle,
+                    Colors.blue,
+                  ),
+                ),
+                Expanded(
+                  child: _buildSummaryItem(
+                    'Active',
+                    activeCount.toString(),
+                    Icons.directions_bus,
+                    Colors.green,
+                  ),
+                ),
+                Expanded(
+                  child: _buildSummaryItem(
+                    'Completed',
+                    completedCount.toString(),
+                    Icons.done_all,
+                    Colors.purple,
+                  ),
+                ),
+                Expanded(
+                  child: _buildSummaryItem(
+                    'Cancelled',
+                    cancelledCount.toString(),
+                    Icons.cancel,
+                    Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+            
+            // Financial Summary
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[200]!),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.payments, size: 16, color: Colors.green[700]),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Total Revenue',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₱${totalRevenue.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        Text(
+                          'Paid bookings',
+                          style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 50,
+                    color: Colors.green[200],
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.pending_actions, size: 16, color: Colors.orange[700]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Pending',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₱${pendingRevenue.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[700],
+                            ),
+                          ),
+                          Text(
+                            'Awaiting payment',
+                            style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 50,
+                    color: Colors.green[200],
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.discount, size: 16, color: Colors.red[700]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Total Discount',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₱${totalDiscount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[700],
+                            ),
+                          ),
+                          Text(
+                            'Savings applied',
+                            style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 50,
+                    color: Colors.green[200],
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.airline_seat_recline_normal, size: 16, color: Colors.blue[700]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Total Seats',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            totalSeats.toString(),
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                          Text(
+                            '${bookings.length} booking${bookings.length > 1 ? 's' : ''}',
+                            style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPassengersByStatus(List<Booking> bookings) {
+    // Group bookings by status
+    final Map<String, List<Booking>> bookingsByStatus = {
+      'confirmed': bookings.where((b) => b.bookingStatus.toLowerCase() == 'confirmed').toList(),
+      'active': bookings.where((b) => b.bookingStatus.toLowerCase() == 'active').toList(),
+      'completed': bookings.where((b) => b.bookingStatus.toLowerCase() == 'completed').toList(),
+      'cancelled': bookings.where((b) => b.bookingStatus.toLowerCase() == 'cancelled').toList(),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Passenger Details by Status',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: AppConstants.defaultPadding),
+        
+        // Confirmed Bookings
+        if (bookingsByStatus['confirmed']!.isNotEmpty)
+          _buildStatusSection(
+            'Confirmed',
+            bookingsByStatus['confirmed']!,
+            Colors.blue,
+            Icons.check_circle,
+          ),
+        
+        // Active Bookings
+        if (bookingsByStatus['active']!.isNotEmpty)
+          _buildStatusSection(
+            'Active',
+            bookingsByStatus['active']!,
+            Colors.green,
+            Icons.directions_bus,
+          ),
+        
+        // Completed Bookings
+        if (bookingsByStatus['completed']!.isNotEmpty)
+          _buildStatusSection(
+            'Completed',
+            bookingsByStatus['completed']!,
+            Colors.purple,
+            Icons.done_all,
+          ),
+        
+        // Cancelled Bookings
+        if (bookingsByStatus['cancelled']!.isNotEmpty)
+          _buildStatusSection(
+            'Cancelled',
+            bookingsByStatus['cancelled']!,
+            Colors.red,
+            Icons.cancel,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildStatusSection(String status, List<Booking> bookings, Color color, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '$status (${bookings.length})',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...bookings.map((booking) => _buildPassengerCard(booking)),
+        const SizedBox(height: AppConstants.defaultPadding),
+      ],
+    );
+  }
+
+  Widget _buildPassengerCard(Booking booking) {
+    final statusColor = _getBookingStatusColor(booking.bookingStatus);
+    final statusIcon = _getBookingStatusIcon(booking.bookingStatus);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: statusColor.withOpacity(0.1),
+              child: Icon(statusIcon, color: statusColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    booking.passengerDetails.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.phone, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        booking.passengerDetails.phone,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.email, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          booking.passengerDetails.email,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.airline_seat_recline_normal, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Seats: ${booking.seatIds.join(', ')}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.confirmation_number, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        booking.eTicketId ?? 'N/A',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor),
+                  ),
+                  child: Text(
+                    booking.bookingStatus.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₱${booking.totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  booking.paymentStatus.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: booking.paymentStatus == 'paid' ? Colors.green : Colors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getBookingStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return Colors.blue;
+      case 'active':
+        return Colors.green;
+      case 'completed':
+        return Colors.purple;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getBookingStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return Icons.check_circle;
+      case 'active':
+        return Icons.directions_bus;
+      case 'completed':
+        return Icons.done_all;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help;
+    }
+  }
+
+  Future<void> _exportToPdf(List<Booking> bookings) async {
+    final pdf = pw.Document();
+    
+    // Calculate statistics
+    final confirmedCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'confirmed').length;
+    final activeCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'active').length;
+    final completedCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'completed').length;
+    final cancelledCount = bookings.where((b) => b.bookingStatus.toLowerCase() == 'cancelled').length;
+    
+    final totalRevenue = bookings.where((b) => b.paymentStatus == 'paid').fold<double>(0, (sum, b) => sum + b.totalAmount);
+    final pendingRevenue = bookings.where((b) => b.paymentStatus == 'pending').fold<double>(0, (sum, b) => sum + b.totalAmount);
+    final totalDiscount = bookings.fold<double>(0, (sum, b) => sum + b.discountAmount);
+    final totalSeats = bookings.fold<int>(0, (sum, b) => sum + b.numberOfSeats);
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return [
+            // Header
+            pw.Header(
+              level: 0,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Trip History Report',
+                    style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Generated on ${DateFormat('MMMM dd, yyyy - hh:mm a').format(DateTime.now())}',
+                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            
+            // Summary Statistics
+            pw.Container(
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blue50,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Booking Summary',
+                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 12),
+                  
+                  // Status counts
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildPdfSummaryItem('Confirmed', confirmedCount.toString()),
+                      _buildPdfSummaryItem('Active', activeCount.toString()),
+                      _buildPdfSummaryItem('Completed', completedCount.toString()),
+                      _buildPdfSummaryItem('Cancelled', cancelledCount.toString()),
+                    ],
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.Divider(),
+                  pw.SizedBox(height: 12),
+                  
+                  // Financial summary
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildPdfSummaryItem('Total Revenue', 'PHP ${totalRevenue.toStringAsFixed(2)}'),
+                      _buildPdfSummaryItem('Pending', 'PHP ${pendingRevenue.toStringAsFixed(2)}'),
+                      _buildPdfSummaryItem('Total Discount', 'PHP ${totalDiscount.toStringAsFixed(2)}'),
+                      _buildPdfSummaryItem('Total Seats', totalSeats.toString()),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            
+            // Bookings Table
+            pw.Text(
+              'Booking Details',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FlexColumnWidth(1.5),
+                5: const pw.FlexColumnWidth(1),
+              },
+              children: [
+                // Header row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _buildTableHeader('Passenger'),
+                    _buildTableHeader('Route'),
+                    _buildTableHeader('Seats'),
+                    _buildTableHeader('Amount'),
+                    _buildTableHeader('Status'),
+                    _buildTableHeader('Payment'),
+                  ],
+                ),
+                // Data rows
+                ...bookings.map((booking) => pw.TableRow(
+                  children: [
+                    _buildTableCell(booking.passengerDetails.name),
+                    _buildTableCell('${booking.origin} to ${booking.destination}'),
+                    _buildTableCell(booking.numberOfSeats.toString()),
+                    _buildTableCell('PHP ${booking.totalAmount.toStringAsFixed(2)}'),
+                    _buildTableCell(booking.bookingStatus),
+                    _buildTableCell(booking.paymentStatus),
+                  ],
+                )),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+    
+    // Show print dialog
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'trip_history_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+    );
+  }
+
+  pw.Widget _buildPdfSummaryItem(String label, String value) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          label,
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _buildTableHeader(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+      ),
+    );
+  }
+
+  pw.Widget _buildTableCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        style: const pw.TextStyle(fontSize: 9),
+      ),
+    );
+  }
+
+  Future<void> _exportReport() async {
+    try {
+      final pdf = pw.Document();
+      
+      // Get all data needed for the report
+      final DateTimeRange range = _getDateRange();
+      final vans = await _vanService.getVansStream().first;
+      final activeVans = vans.where((van) => van.isActive).toList();
+      
+      // Get all bookings for the period
+      final bookingsSnapshot = await _bookingService.getBookingsByDateRange(range.start, range.end).first;
+      
+      // Calculate comprehensive statistics
+      final totalBookings = bookingsSnapshot.length;
+      final activeBookings = bookingsSnapshot.where((b) => b.bookingStatus.toLowerCase() == 'active').length;
+      final completedBookings = bookingsSnapshot.where((b) => b.bookingStatus.toLowerCase() == 'completed').length;
+      final cancelledBookings = bookingsSnapshot.where((b) => b.bookingStatus.toLowerCase() == 'cancelled').length;
+      final confirmedBookings = bookingsSnapshot.where((b) => b.bookingStatus.toLowerCase() == 'confirmed').length;
+      
+      final totalRevenue = bookingsSnapshot.where((b) => b.paymentStatus == 'paid').fold<double>(0, (sum, b) => sum + b.totalAmount);
+      final pendingRevenue = bookingsSnapshot.where((b) => b.paymentStatus == 'pending').fold<double>(0, (sum, b) => sum + b.totalAmount);
+      final totalDiscount = bookingsSnapshot.fold<double>(0, (sum, b) => sum + b.discountAmount);
+      final totalSeats = bookingsSnapshot.fold<int>(0, (sum, b) => sum + b.numberOfSeats);
+      
+      // Revenue by payment method
+      final revenueByMethod = <String, double>{};
+      for (var booking in bookingsSnapshot.where((b) => b.paymentStatus == 'paid')) {
+        revenueByMethod[booking.paymentMethod] = (revenueByMethod[booking.paymentMethod] ?? 0) + booking.totalAmount;
+      }
+      
+      // Top routes by bookings
+      final routeBookings = <String, int>{};
+      for (var booking in bookingsSnapshot) {
+        final routeKey = '${booking.origin} to ${booking.destination}';
+        routeBookings[routeKey] = (routeBookings[routeKey] ?? 0) + 1;
+      }
+      final topRoutes = routeBookings.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                level: 0,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'UVExpress Analytics Report',
+                      style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              'Period: ${_getPeriodLabel()}',
+                              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue700),
+                            ),
+                            pw.Text(
+                              '${DateFormat('MMM dd, yyyy').format(range.start)} - ${DateFormat('MMM dd, yyyy').format(range.end)}',
+                              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                            ),
+                          ],
+                        ),
+                        pw.Text(
+                          'Generated: ${DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now())}',
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 24),
+              
+              // Key Metrics Section
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Key Metrics',
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 16),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildPdfMetricCard('Total Bookings', totalBookings.toString(), PdfColors.blue),
+                        _buildPdfMetricCard('Active Vans', activeVans.length.toString(), PdfColors.orange),
+                        _buildPdfMetricCard('Total Users', (_statistics['totalUsers'] ?? 0).toString(), PdfColors.green),
+                        _buildPdfMetricCard('New Users Today', (_statistics['newUsersToday'] ?? 0).toString(), PdfColors.purple),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              
+              // Booking Status Breakdown
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Booking Status Breakdown',
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 12),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildPdfSummaryItem('Confirmed', confirmedBookings.toString()),
+                        _buildPdfSummaryItem('Active', activeBookings.toString()),
+                        _buildPdfSummaryItem('Completed', completedBookings.toString()),
+                        _buildPdfSummaryItem('Cancelled', cancelledBookings.toString()),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              
+              // Financial Summary
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green50,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Financial Summary',
+                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 12),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildPdfSummaryItem('Total Revenue (Paid)', 'PHP ${totalRevenue.toStringAsFixed(2)}'),
+                        _buildPdfSummaryItem('Pending Revenue', 'PHP ${pendingRevenue.toStringAsFixed(2)}'),
+                        _buildPdfSummaryItem('Total Discount', 'PHP ${totalDiscount.toStringAsFixed(2)}'),
+                        _buildPdfSummaryItem('Total Seats Sold', totalSeats.toString()),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              
+              // Revenue by Payment Method
+              if (revenueByMethod.isNotEmpty) ...[
+                pw.Text(
+                  'Revenue by Payment Method',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableHeader('Payment Method'),
+                        _buildTableHeader('Revenue'),
+                        _buildTableHeader('Percentage'),
+                      ],
+                    ),
+                    ...revenueByMethod.entries.map((entry) {
+                      final percentage = (entry.value / totalRevenue * 100).toStringAsFixed(1);
+                      return pw.TableRow(
+                        children: [
+                          _buildTableCell(entry.key),
+                          _buildTableCell('PHP ${entry.value.toStringAsFixed(2)}'),
+                          _buildTableCell('$percentage%'),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+              ],
+              
+              // Top Routes
+              if (topRoutes.isNotEmpty) ...[
+                pw.Text(
+                  'Top Routes (by Bookings)',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableHeader('Rank'),
+                        _buildTableHeader('Route'),
+                        _buildTableHeader('Bookings'),
+                      ],
+                    ),
+                    ...topRoutes.take(10).toList().asMap().entries.map((entry) {
+                      final rank = entry.key + 1;
+                      final route = entry.value;
+                      return pw.TableRow(
+                        children: [
+                          _buildTableCell(rank.toString()),
+                          _buildTableCell(route.key),
+                          _buildTableCell(route.value.toString()),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+              ],
+              
+              // Active Vehicles Summary
+              pw.Text(
+                'Active Vehicles Summary',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      _buildTableHeader('Plate Number'),
+                      _buildTableHeader('Type'),
+                      _buildTableHeader('Status'),
+                      _buildTableHeader('Capacity'),
+                    ],
+                  ),
+                  ...activeVans.map((van) => pw.TableRow(
+                    children: [
+                      _buildTableCell(van.plateNumber),
+                      _buildTableCell(van.vehicleType),
+                      _buildTableCell(van.status),
+                      _buildTableCell('${van.capacity} seats'),
+                    ],
+                  )),
+                ],
+              ),
+              
+              // Trip History Section
+              pw.SizedBox(height: 24),
+              pw.Text(
+                'Trip History',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Text(
+                'Completed trips during this period',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+              ),
+              pw.SizedBox(height: 12),
+              
+              // Build trip history
+              ...() {
+                // Group completed bookings by trip
+                final completedBookings = bookingsSnapshot.where((b) => 
+                  b.bookingStatus.toLowerCase() == 'completed' && b.vanPlateNumber != null
+                ).toList();
+                
+                Map<String, List<Booking>> tripGroups = {};
+                for (var booking in completedBookings) {
+                  final tripDate = DateFormat('yyyy-MM-dd').format(booking.departureTime);
+                  final tripKey = '${booking.vanPlateNumber}_${tripDate}_${booking.routeId}';
+                  
+                  if (!tripGroups.containsKey(tripKey)) {
+                    tripGroups[tripKey] = [];
+                  }
+                  tripGroups[tripKey]!.add(booking);
+                }
+                
+                // Convert to sorted list
+                final trips = tripGroups.entries.toList()
+                  ..sort((a, b) {
+                    final aDate = a.value.first.departureTime;
+                    final bDate = b.value.first.departureTime;
+                    return bDate.compareTo(aDate);
+                  });
+                
+                if (trips.isEmpty) {
+                  return [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(16),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                      ),
+                      child: pw.Text(
+                        'No completed trips found for this period.',
+                        style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+                      ),
+                    ),
+                  ];
+                }
+                
+                return trips.take(20).map((trip) {
+                  final bookings = trip.value;
+                  final firstBooking = bookings.first;
+                  final totalPassengers = bookings.length;
+                  final tripRevenue = bookings.fold<double>(0, (sum, b) => sum + b.totalAmount);
+                  
+                  return pw.Container(
+                    margin: const pw.EdgeInsets.only(bottom: 12),
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey300),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        // Trip header
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Expanded(
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(
+                                    firstBooking.vanPlateNumber ?? 'Unknown Vehicle',
+                                    style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    '${firstBooking.origin} to ${firstBooking.destination}',
+                                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text(
+                                  DateFormat('MMM dd, yyyy').format(firstBooking.departureTime),
+                                  style: const pw.TextStyle(fontSize: 10),
+                                ),
+                                pw.Text(
+                                  DateFormat('hh:mm a').format(firstBooking.departureTime),
+                                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Divider(height: 1, color: PdfColors.grey300),
+                        pw.SizedBox(height: 8),
+                        
+                        // Trip summary
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Row(
+                              children: [
+                                pw.Text(
+                                  'Passengers: ',
+                                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                                ),
+                                pw.Text(
+                                  totalPassengers.toString(),
+                                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            pw.Row(
+                              children: [
+                                pw.Text(
+                                  'Revenue: ',
+                                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                                ),
+                                pw.Text(
+                                  'PHP ${tripRevenue.toStringAsFixed(2)}',
+                                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.green700),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        
+                        // Passenger details (if space allows, show first few)
+                        if (bookings.length <= 5) ...[
+                          pw.SizedBox(height: 8),
+                          pw.Divider(height: 1, color: PdfColors.grey300),
+                          pw.SizedBox(height: 6),
+                          ...bookings.map((booking) => pw.Padding(
+                            padding: const pw.EdgeInsets.only(bottom: 4),
+                            child: pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Expanded(
+                                  child: pw.Text(
+                                    booking.passengerDetails.name,
+                                    style: const pw.TextStyle(fontSize: 8),
+                                  ),
+                                ),
+                                pw.Text(
+                                  '${booking.numberOfSeats} seat${booking.numberOfSeats > 1 ? 's' : ''}',
+                                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                                ),
+                                pw.SizedBox(width: 8),
+                                pw.Text(
+                                  'PHP ${booking.totalAmount.toStringAsFixed(2)}',
+                                  style: const pw.TextStyle(fontSize: 8),
+                                ),
+                              ],
+                            ),
+                          )),
+                        ] else ...[
+                          pw.SizedBox(height: 6),
+                          pw.Text(
+                            '+ ${bookings.length} passenger bookings',
+                            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList();
+              }(),
+              
+              // Trip history summary note
+              if (bookingsSnapshot.where((b) => 
+                b.bookingStatus.toLowerCase() == 'completed' && b.vanPlateNumber != null
+              ).length > 20) ...[
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.blue50,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  ),
+                  child: pw.Text(
+                    'Note: Only the first 20 trips are shown. Total completed trips: ${bookingsSnapshot.where((b) => b.bookingStatus.toLowerCase() == 'completed' && b.vanPlateNumber != null).length}',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.blue900),
+                  ),
+                ),
+              ],
+              
+              // Footer
+              pw.SizedBox(height: 32),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+              pw.Text(
+                'UVExpress Admin Panel - This report is generated automatically and reflects data as of ${DateFormat('MMM dd, yyyy - hh:mm a').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                textAlign: pw.TextAlign.center,
+              ),
+            ];
+          },
+        ),
+      );
+      
+      // Show print dialog
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'uvexpress_analytics_${_selectedPeriod}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report exported successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error exporting report: $e')),
+        );
+      }
+    }
+  }
+
+  pw.Widget _buildPdfMetricCard(String label, String value, PdfColor color) {
+    return pw.Container(
+      width: 100,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        border: pw.Border.all(color: color, width: 2),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: color),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+          ),
+        ],
+      ),
     );
   }
 }
