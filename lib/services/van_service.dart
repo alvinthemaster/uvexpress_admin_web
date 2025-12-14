@@ -544,11 +544,19 @@ class VanService {
         return;
       }
 
-      // Query confirmed/active bookings for this SPECIFIC van
-      QuerySnapshot confirmedBookingsSnapshot = await _firestore
+      // Query verified bookings for this SPECIFIC van (these are passengers who boarded)
+      QuerySnapshot verifiedBookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
+          .where('vanPlateNumber', isEqualTo: van.plateNumber)
+          .where('bookingStatus', isEqualTo: 'verified')
+          .get();
+
+      // Query confirmed/active bookings for this SPECIFIC van (these did NOT board)
+      QuerySnapshot nonBoardedConfirmedSnapshot = await _firestore
+          .collection('bookings')
+          .where('routeId', isEqualTo: van.currentRouteId)
+          .where('vanPlateNumber', isEqualTo: van.plateNumber)
           .where('bookingStatus', whereIn: ['confirmed', 'active'])
           .get();
 
@@ -556,7 +564,7 @@ class VanService {
       QuerySnapshot pendingBookingsSnapshot = await _firestore
           .collection('bookings')
           .where('routeId', isEqualTo: van.currentRouteId)
-          .where('vanPlateNumber', isEqualTo: van.plateNumber) // CRITICAL: Filter by specific van
+          .where('vanPlateNumber', isEqualTo: van.plateNumber)
           .where('bookingStatus', isEqualTo: 'pending')
           .get();
 
@@ -566,21 +574,40 @@ class VanService {
       int totalSeatsReleased = 0;
       List<String> releasedSeats = [];
 
-      // Process confirmed/active bookings - mark as completed
-      for (QueryDocumentSnapshot bookingDoc in confirmedBookingsSnapshot.docs) {
+      // Process verified bookings - mark as completed
+      for (QueryDocumentSnapshot bookingDoc in verifiedBookingsSnapshot.docs) {
         Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
         int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
         List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
-        
+
         // Mark booking as completed
         batch.update(bookingDoc.reference, {
           'bookingStatus': 'completed',
-          'completionReason': 'Trip completed by administrator',
+          'completionReason': 'Passenger boarded - trip completed',
           'completedAt': FieldValue.serverTimestamp(),
           'adminCompletion': true,
         });
-        
+
         completedCount++;
+        totalSeatsReleased += numberOfSeats;
+        releasedSeats.addAll(seatIds);
+      }
+
+      // Process confirmed/active bookings that did NOT board - mark as failed so rebook triggers
+      for (QueryDocumentSnapshot bookingDoc in nonBoardedConfirmedSnapshot.docs) {
+        Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
+        int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
+        List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
+
+        // Mark booking as failed (no-show)
+        batch.update(bookingDoc.reference, {
+          'bookingStatus': 'failed',
+          'cancellationReason': 'Trip completed - passenger did not board',
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'adminCancellation': true,
+        });
+
+        failedCount++;
         totalSeatsReleased += numberOfSeats;
         releasedSeats.addAll(seatIds);
       }
@@ -590,7 +617,7 @@ class VanService {
         Map<String, dynamic> bookingData = bookingDoc.data() as Map<String, dynamic>;
         int numberOfSeats = bookingData['numberOfSeats'] ?? 0;
         List<String> seatIds = List<String>.from(bookingData['seatIds'] ?? []);
-        
+
         // Mark booking as failed
         batch.update(bookingDoc.reference, {
           'bookingStatus': 'failed',
@@ -598,7 +625,7 @@ class VanService {
           'cancelledAt': FieldValue.serverTimestamp(),
           'adminCancellation': true,
         });
-        
+
         failedCount++;
         totalSeatsReleased += numberOfSeats;
         releasedSeats.addAll(seatIds);

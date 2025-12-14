@@ -46,6 +46,8 @@ class AppConstants {
 
   // Booking Status
   static const String bookingStatusActive = 'active';
+    static const String bookingStatusPending = 'pending';
+    static const String bookingStatusVerified = 'verified';
   static const String bookingStatusCompleted = 'completed';
   static const String bookingStatusCancelled = 'cancelled';
   static const String bookingStatusConfirmed = 'confirmed';
