@@ -89,10 +89,44 @@ class BookingService {
   }
 
   // Update booking status
-  Future<void> updateBookingStatus(String id, String status) async {
+  Future<void> updateBookingStatus(String id, String status, {bool allowVerified = false}) async {
     try {
+      // Fetch current booking to validate transitions
+      Booking? booking = await getBookingById(id);
+      if (booking == null) {
+        throw Exception('Booking not found');
+      }
+
+      final String current = booking.bookingStatus.toLowerCase();
+      final String newStatus = status.toLowerCase();
+
+      // Idempotent: if same status, do nothing
+      if (current == newStatus) return;
+
+      // Normalize some variants to 'verified'
+      final String normalizedNew = (newStatus == 'on-board' || newStatus == 'on board' || newStatus == 'on_board') ? 'verified' : newStatus;
+
+      if (normalizedNew == 'verified') {
+        if (!allowVerified) {
+          throw Exception('Only conductor/scanner may mark tickets as Verified');
+        }
+        if (current == 'pending') {
+          throw Exception('Cannot mark ticket as Verified: booking is still Pending (requires admin confirmation)');
+        }
+        if (current == 'verified') {
+          throw Exception('Ticket is already marked Verified');
+        }
+      }
+
+      // If confirming a discounted ticket, allow transition from pending -> confirmed
+      if (normalizedNew == 'confirmed' && booking.discountAmount > 0) {
+        if (current != 'pending' && current != 'confirmed') {
+          // allow, but don't block other explicit flows
+        }
+      }
+
       await _firestore.collection(_collection).doc(id).update({
-        'bookingStatus': status,
+        'bookingStatus': normalizedNew,
       });
     } catch (e) {
       print('Error updating booking status: $e');
@@ -124,8 +158,15 @@ class BookingService {
   // Create a new booking
   Future<String> createBooking(Booking booking) async {
     try {
+      // Prepare booking map and enforce initial status rules:
+      // - If booking contains discounts (discountAmount > 0) -> start as 'pending'
+      // - Otherwise -> start as 'confirmed'
+      Map<String, dynamic> bookingMap = booking.toFirestore();
+      final double dAmount = (bookingMap['discountAmount'] ?? 0).toDouble();
+      bookingMap['bookingStatus'] = dAmount > 0 ? 'pending' : 'confirmed';
+
       // Add the booking to Firestore
-      DocumentReference docRef = await _firestore.collection(_collection).add(booking.toFirestore());
+      DocumentReference docRef = await _firestore.collection(_collection).add(bookingMap);
       
       // Update van occupancy for the route and schedule
       await _updateVanOccupancyForRoute(booking.routeId);
@@ -138,7 +179,7 @@ class BookingService {
   }
 
   // Update booking status and handle van occupancy changes
-  Future<void> updateBookingStatusWithVanUpdate(String id, String newStatus) async {
+  Future<void> updateBookingStatusWithVanUpdate(String id, String newStatus, {bool allowVerified = false}) async {
     try {
       // Get the current booking
       Booking? booking = await getBookingById(id);
@@ -147,12 +188,35 @@ class BookingService {
       }
       
       // Update booking status
-      await updateBookingStatus(id, newStatus);
+      await updateBookingStatus(id, newStatus, allowVerified: allowVerified);
       
       // Update van occupancy for the route
       await _updateVanOccupancyForRoute(booking.routeId);
     } catch (e) {
       print('Error updating booking status with van update: $e');
+      rethrow;
+    }
+  }
+
+  // Scan ticket and mark as Verified
+  // This enforces that Pending tickets cannot be scanned and prevents duplicate scans
+  Future<void> scanAndMarkVerified(String id) async {
+    try {
+      Booking? booking = await getBookingById(id);
+      if (booking == null) throw Exception('Booking not found');
+
+      final String current = booking.bookingStatus.toLowerCase();
+      if (current == 'pending') {
+        throw Exception('Cannot scan ticket: booking is still Pending (requires admin confirmation)');
+      }
+      if (current == 'verified') {
+        throw Exception('Ticket has already been scanned (Verified)');
+      }
+
+      // Proceed to set status to verified and update occupancy (allowed only via scanner)
+      await updateBookingStatusWithVanUpdate(id, 'verified', allowVerified: true);
+    } catch (e) {
+      print('Error scanning ticket: $e');
       rethrow;
     }
   }
@@ -203,9 +267,9 @@ class BookingService {
       for (DocumentSnapshot doc in bookingSnapshot.docs) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
         
-        // Filter by status
-        String status = data['bookingStatus'] ?? '';
-        if (status != 'confirmed' && status != 'active') continue;
+        // Filter by status - count confirmed and onboard (and legacy 'active') toward occupancy
+        String status = (data['bookingStatus'] ?? '').toString().toLowerCase();
+        if (status != 'confirmed' && status != 'active' && status != 'verified') continue;
         
         // Filter by today's date
         Timestamp? departureTimestamp = data['departureTime'] as Timestamp?;
@@ -264,7 +328,7 @@ class BookingService {
   Stream<List<Booking>> getActiveBookings() {
     return _firestore
         .collection(_collection)
-        .where('bookingStatus', whereIn: ['active', 'confirmed'])
+        .where('bookingStatus', whereIn: ['active', 'confirmed', 'verified'])
         .orderBy('departureTime')
         .snapshots()
         .map((snapshot) =>

@@ -26,6 +26,7 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
   final List<String> _statusOptions = [
     'all',
     'active',
+    'pending',
     'confirmed',
     'completed',
     'cancelled'
@@ -379,11 +380,20 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
                 ),
                 PopupMenuButton<String>(
                   onSelected: (value) => _handleBookingAction(value, booking),
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                    const PopupMenuItem(value: 'refund', child: Text('Refund')),
-                    const PopupMenuItem(
+                  itemBuilder: (context) {
+                    final items = <PopupMenuEntry<String>>[];
+                    items.add(const PopupMenuItem(value: 'edit', child: Text('Edit')));
+                    // If booking is pending (discounted), show Confirm Ticket action
+                    if (booking.bookingStatus.toLowerCase() == 'pending') {
+                      items.add(const PopupMenuItem(value: 'confirm', child: Text('Confirm Ticket')));
+                    }
+                    // If booking is confirmed, show Confirm Ticket action
+                    if (booking.bookingStatus.toLowerCase() == 'confirmed') {
+                      items.add(const PopupMenuItem(value: 'confirm', child: Text('Confirm Ticket')));
+                    }
+                    items.add(const PopupMenuItem(value: 'cancel', child: Text('Cancel')));
+                    items.add(const PopupMenuItem(value: 'refund', child: Text('Refund')));
+                    items.add(const PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
@@ -392,8 +402,9 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
                           Text('Delete', style: TextStyle(color: Colors.red)),
                         ],
                       ),
-                    ),
-                  ],
+                    ));
+                    return items;
+                  },
                   child: const Icon(Icons.more_vert),
                 ),
               ],
@@ -412,10 +423,17 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
       switch (status) {
         case 'active':
         case 'confirmed':
+        case 'verified':
           color = Colors.blue;
+          break;
+        case 'pending':
+          color = Colors.orange;
           break;
         case 'completed':
           color = Colors.green;
+          break;
+        case 'verified':
+          color = Colors.teal;
           break;
         case 'cancelled':
         case 'failed':
@@ -481,6 +499,12 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
   }
 
   String _formatStatus(String status) {
+    final s = status.toLowerCase();
+    // Display mapping: show 'confirmed' as 'Confirmed' in the UI (label only)
+    if (s == 'confirmed') return 'Confirmed';
+    if (s == 'verified') return 'Verified';
+
+    // Fallback: split underscores and capitalize words
     return status.split('_').map((word) {
       return word[0].toUpperCase() + word.substring(1);
     }).join(' ');
@@ -523,6 +547,16 @@ class _BookingManagementScreenState extends State<BookingManagementScreen> {
         case 'edit':
           _showBookingDetails(context, booking);
           break;
+        case 'confirm':
+          // Admin confirmation for discounted (pending) tickets
+          await _bookingService.updateBookingStatusWithVanUpdate(booking.id, 'confirmed');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ticket confirmed successfully')),
+            );
+          }
+          break;
+        // 'verify' action removed — admin uses 'confirm' instead
         case 'cancel':
           await _bookingService.updateBookingStatus(booking.id, 'cancelled');
           if (mounted) {
@@ -650,6 +684,7 @@ class _BookingDetailsDialog extends StatefulWidget {
 }
 
 class _BookingDetailsDialogState extends State<_BookingDetailsDialog> {
+  final BookingService _bookingService = BookingService();
   @override
   Widget build(BuildContext context) {
     if (widget.booking == null) {
@@ -699,6 +734,27 @@ class _BookingDetailsDialogState extends State<_BookingDetailsDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
         ),
+        if (widget.booking!.bookingStatus.toLowerCase() == 'pending')
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _bookingService.updateBookingStatusWithVanUpdate(widget.booking!.id, 'confirmed');
+                if (mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Ticket confirmed successfully')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error confirming ticket: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm Ticket'),
+          ),
         ElevatedButton(
           onPressed: () {
             Navigator.of(context).pop();
@@ -820,7 +876,7 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
           final booking = Booking.fromFirestore(doc);
           
           // Only count active/confirmed bookings (not cancelled)
-          if (booking.bookingStatus == 'confirmed' || booking.bookingStatus == 'active') {
+          if (booking.bookingStatus == 'confirmed' || booking.bookingStatus == 'active' || booking.bookingStatus == 'verified') {
             // Check if booking is for same day
             bool isSameDay = booking.departureTime.year == _selectedDepartureTime.year &&
                 booking.departureTime.month == _selectedDepartureTime.month &&
@@ -1017,7 +1073,7 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
         totalAmount: totalAmount,
         paymentMethod: _selectedPaymentMethod,
         paymentStatus: 'paid', // Auto-confirm as paid for admin bookings
-        bookingStatus: 'confirmed', // Auto-confirm booking status
+         bookingStatus: discountedSeatsCount > 0 ? 'pending' : 'confirmed', // Discounted tickets start as 'pending' (based on discounted seats count)
         qrCodeData: ticketId, // Use ticket ID as QR code data for scanning
         eTicketId: ticketId,
         passengerDetails: PassengerDetails(
@@ -1051,7 +1107,7 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
       print('  • Seats: ${_selectedSeats.join(", ")}');
       print('  • Total Amount: ₱${totalAmount.toStringAsFixed(2)}');
       print('  • Payment Status: paid (auto-confirmed)');
-      print('  • Booking Status: confirmed (auto-confirmed)');
+      print('  • Booking Status: ${discountedSeatsCount > 0 ? 'pending (requires admin confirmation)' : 'confirmed (auto-confirmed)'}');
 
       await _bookingService.createBooking(booking);
 
@@ -1071,15 +1127,16 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
 
       if (mounted) {
         Navigator.of(context).pop();
+        final bool isPending = discountedSeatsCount > 0;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '✅ Booking Created & Auto-Confirmed!',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                Text(
+                  isPending ? '🔔 Booking Created (Pending Confirmation)' : '✅ Booking Created & Auto-Confirmed!',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 const SizedBox(height: 4),
                 Text('Ticket ID: $ticketId'),
@@ -1091,13 +1148,13 @@ class _ManualBookingDialogState extends State<_ManualBookingDialog> {
                   '✓ Payment Status: PAID',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-                const Text(
-                  '✓ Booking Status: CONFIRMED',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                Text(
+                  isPending ? '✓ Booking Status: PENDING (Requires admin confirmation)' : '✓ Booking Status: CONFIRMED',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
-            backgroundColor: Colors.green[700],
+            backgroundColor: isPending ? Colors.orange[800] : Colors.green[700],
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
             width: 400,
