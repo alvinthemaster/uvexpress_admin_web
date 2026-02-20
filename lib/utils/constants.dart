@@ -26,6 +26,7 @@ class AppConstants {
   static const String bookingsRoute = '/bookings';
   static const String routesRoute = '/routes';
   static const String discountsRoute = '/discounts';
+  static const String vanRentalsRoute = '/van-rentals';
   static const String analyticsRoute = '/analytics';
   static const String settingsRoute = '/settings';
 
@@ -34,9 +35,17 @@ class AppConstants {
   static const String routesCollection = 'routes';
   static const String bookingsCollection = 'bookings';
   static const String discountsCollection = 'discounts';
+  static const String vanRentalsCollection = 'van_rentals';
   static const String schedulesCollection = 'schedules';
   static const String adminUsersCollection = 'admin_users';
   static const String analyticsCollection = 'analytics';
+
+  // Van Rental Status
+  static const String vanRentalStatusPending = 'pending';
+  static const String vanRentalStatusConfirmed = 'confirmed';
+  static const String vanRentalStatusActive = 'active';
+  static const String vanRentalStatusCompleted = 'completed';
+  static const String vanRentalStatusCancelled = 'cancelled';
 
   // Van Status
   static const String vanStatusActive = 'active';
@@ -176,6 +185,8 @@ class AppStrings {
   static const String analytics = 'Analytics';
   static const String settings = 'Settings';
   static const String profile = 'Profile';
+  static const String vanRentals = 'Van Rentals';
+  static const String vanRentalManagement = 'Van Rental Management';
 
   // Van Management
   static const String vanManagement = 'Van Management';

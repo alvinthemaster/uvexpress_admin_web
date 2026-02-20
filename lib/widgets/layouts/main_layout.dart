@@ -220,6 +220,12 @@ class _MainLayoutState extends State<MainLayout> {
                   isSelected: currentRoute == AppConstants.routesRoute,
                 ),
                 _buildNavItem(
+                  icon: Icons.car_rental,
+                  label: AppStrings.vanRentals,
+                  route: AppConstants.vanRentalsRoute,
+                  isSelected: currentRoute == AppConstants.vanRentalsRoute,
+                ),
+                _buildNavItem(
                   icon: Icons.analytics,
                   label: AppStrings.analytics,
                   route: AppConstants.analyticsRoute,
@@ -550,6 +556,8 @@ class _MainLayoutState extends State<MainLayout> {
         return AppStrings.routeManagement;
       case AppConstants.discountsRoute:
         return AppStrings.discountManagement;
+      case AppConstants.vanRentalsRoute:
+        return AppStrings.vanRentalManagement;
       case AppConstants.analyticsRoute:
         return AppStrings.analytics;
       case AppConstants.settingsRoute:

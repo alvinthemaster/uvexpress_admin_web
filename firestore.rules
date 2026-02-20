@@ -53,5 +53,18 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create, update, delete: if isAdmin();
     }
+    
+    // Rental van listings (admin-managed, publicly readable by the user app)
+    match /rental_vans/{listingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Van rental requests (created by the user app, managed by admins)
+    match /van_rentals/{rentalId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
   }
 }
