@@ -9,6 +9,7 @@ import 'providers/auth_provider.dart';
 import 'providers/van_provider.dart';
 import 'providers/booking_provider.dart';
 import 'providers/van_rental_provider.dart';
+import 'providers/van_rental_request_provider.dart';
 import 'providers/rental_van_listing_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -43,6 +44,7 @@ class GodtrascoAdminApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VanProvider()),
         ChangeNotifierProvider(create: (_) => BookingProvider()),
         ChangeNotifierProvider(create: (_) => VanRentalProvider()),
+        ChangeNotifierProvider(create: (_) => VanRentalRequestProvider()),
         ChangeNotifierProvider(create: (_) => RentalVanListingProvider()),
       ],
       child: Consumer<AuthProvider>(

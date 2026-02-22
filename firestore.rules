@@ -1,70 +1,100 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
+
+    // ── Helper functions ──────────────────────────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
              exists(/databases/$(database)/documents/admin_users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.isActive == true;
     }
-    
+
     function isSuperAdmin() {
-      return isAdmin() && 
+      return isAdmin() &&
              get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.role == 'super_admin';
     }
-    
-    // Admin users collection - only super admins can manage
+
+    // ── Admin users (admin web only) ──────────────────────────────────────────
     match /admin_users/{userId} {
-      allow read: if isAdmin();
+      allow read: if isAuthenticated();
       allow create, update, delete: if isSuperAdmin();
     }
-    
-    // Vans collection
+
+    // ── Vans ──────────────────────────────────────────────────────────────────
+    // Public read for mobile QR system; authenticated update for occupancy;
+    // admin-only create/delete.
     match /vans/{vanId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow read: if true;
+      allow update: if isAuthenticated();
+      allow create, delete: if isAdmin();
     }
-    
-    // Routes collection
+
+    // ── Routes ────────────────────────────────────────────────────────────────
     match /routes/{routeId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if isAdmin();
-    }
-    
-    // Bookings collection
-    match /bookings/{bookingId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if isAdmin();
-    }
-    
-    // Discounts collection
-    match /discounts/{discountId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if isAdmin();
-    }
-    
-    // Schedules collection
-    match /schedules/{scheduleId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if isAdmin();
-    }
-    
-    // Rental van listings (admin-managed, publicly readable by the user app)
-    match /rental_vans/{listingId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
-    
-    // Van rental requests (created by the user app, managed by admins)
-    match /van_rentals/{rentalId} {
-      allow read: if isAdmin();
+
+    // ── Bookings ──────────────────────────────────────────────────────────────
+    // Public read/update for QR confirmation web page; authenticated create.
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow update: if true;
       allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow delete: if isAuthenticated() &&
+                    request.auth.uid == resource.data.userId;
+    }
+
+    // ── Tickets ───────────────────────────────────────────────────────────────
+    match /tickets/{ticketId} {
+      allow read, write: if true;
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() &&
+                         request.auth.uid == userId;
+    }
+
+    // ── Schedules ─────────────────────────────────────────────────────────────
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── Discounts ─────────────────────────────────────────────────────────────
+    match /discounts/{discountId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── Rental van listings ───────────────────────────────────────────────────
+    // Public read for mobile app browsing.
+    // Any authenticated user (admin web session) can create/update/delete.
+    match /rental_vans/{listingId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // ── Van rental requests (from mobile app) ─────────────────────────────────
+    // Users can manage their own requests; admin web can read/update all.
+    match /van_rental_requests/{requestId} {
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // ── Van rentals (admin-created records) ───────────────────────────────────
+    match /van_rentals/{rentalId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
     }
   }
 }

@@ -67,6 +67,16 @@ class RentalVanListingProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> updateRentalStatus(String id, String status) async {
+    try {
+      await _service.updateRentalStatus(id, status);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    }
+  }
+
   Future<bool> deleteListing(String id) async {
     _setLoading(true);
     try {

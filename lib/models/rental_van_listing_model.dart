@@ -34,6 +34,11 @@ class RentalVanListing {
   // ── Location ──────────────────────────────────────────────────────────────
   final String pickupLocation; // default pickup point shown to the user
 
+  // ── Rental status ──────────────────────────────────────────────────────────
+  /// Tracks where this van is in the rental workflow.
+  /// available | pending | approved | paid | completed
+  final String rentalStatus;
+
   // ── Availability ─────────────────────────────────────────────────────────
   final bool isAvailable; // master toggle: admin can disable a listing
   final DateTime? availableFrom; // null = always available from now
@@ -63,6 +68,7 @@ class RentalVanListing {
     this.amenities = const [],
     this.imageUrls = const [],
     this.pickupLocation = '',
+    this.rentalStatus = 'available',
     this.isAvailable = true,
     this.availableFrom,
     this.availableTo,
@@ -97,6 +103,7 @@ class RentalVanListing {
           ? List<String>.from(data['imageUrls'])
           : [],
       pickupLocation: data['pickupLocation'] ?? '',
+      rentalStatus: data['rentalStatus'] as String? ?? 'available',
       isAvailable: data['isAvailable'] ?? true,
       availableFrom: (data['availableFrom'] as Timestamp?)?.toDate(),
       availableTo: (data['availableTo'] as Timestamp?)?.toDate(),
@@ -135,6 +142,7 @@ class RentalVanListing {
       'imageUrls': imageUrls,
       'pickupLocation': pickupLocation,
       // Availability
+      'rentalStatus': rentalStatus,
       'isAvailable': isAvailable,
       'availableFrom':
           availableFrom != null ? Timestamp.fromDate(availableFrom!) : null,
@@ -167,6 +175,7 @@ class RentalVanListing {
     List<String>? amenities,
     List<String>? imageUrls,
     String? pickupLocation,
+    String? rentalStatus,
     bool? isAvailable,
     DateTime? availableFrom,
     DateTime? availableTo,
@@ -193,6 +202,7 @@ class RentalVanListing {
       amenities: amenities ?? this.amenities,
       imageUrls: imageUrls ?? this.imageUrls,
       pickupLocation: pickupLocation ?? this.pickupLocation,
+      rentalStatus: rentalStatus ?? this.rentalStatus,
       isAvailable: isAvailable ?? this.isAvailable,
       availableFrom: availableFrom ?? this.availableFrom,
       availableTo: availableTo ?? this.availableTo,
@@ -202,6 +212,23 @@ class RentalVanListing {
       adminNotes: adminNotes ?? this.adminNotes,
     );
   }
+
+  // ── Rental status metadata ─────────────────────────────────────────────────
+  static const List<String> rentalStatuses = [
+    'available',
+    'pending',
+    'approved',
+    'paid',
+    'completed',
+  ];
+
+  static const Map<String, int> rentalStatusColors = {
+    'available':  0xFF388E3C, // green
+    'pending':    0xFFF57C00, // orange
+    'approved':   0xFF1976D2, // blue
+    'paid':       0xFF00838F, // teal
+    'completed':  0xFF5E35B1, // purple
+  };
 
   // ── Common amenity presets (used in the form UI) ──────────────────────────
   static const List<String> amenityPresets = [

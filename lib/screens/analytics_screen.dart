@@ -9,7 +9,9 @@ import '../services/booking_service.dart';
 import '../services/van_service.dart';
 import '../models/van_model.dart';
 import '../models/booking_model.dart';
+import '../models/rental_van_listing_model.dart';
 import '../providers/van_provider.dart';
+import '../providers/rental_van_listing_provider.dart';
 import '../utils/constants.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -363,6 +365,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               Expanded(child: _buildVanUtilizationCard()),
             ],
           ),
+          const SizedBox(height: AppConstants.defaultPadding),
+          _buildRentalVansSummaryCard(),
         ],
       ),
     );
@@ -478,6 +482,210 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                     color: Colors.grey[600],
                   ),
                 ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Rental Vans Summary Card ─────────────────────────────────────────────
+
+  Widget _buildRentalVansSummaryCard() {
+    return Consumer<RentalVanListingProvider>(
+      builder: (_, provider, __) {
+        final listings = provider.listings;
+        final statusBreakdown = <String, int>{};
+        for (final s in RentalVanListing.rentalStatuses) {
+          statusBreakdown[s] = listings.where((l) => l.rentalStatus == s).length;
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ─────────────────────────────────────────────
+                Row(
+                  children: [
+                    Icon(Icons.car_rental, color: Colors.teal[700], size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Rental Vans Overview',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.teal[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal[200]!),
+                      ),
+                      child: Text(
+                        '${listings.length} total listing${listings.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                            color: Colors.teal[800],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppConstants.defaultPadding),
+
+                // ── Status breakdown chips ──────────────────────────────
+                LayoutBuilder(builder: (ctx, constraints) {
+                  return Wrap(
+                    spacing: AppConstants.smallPadding,
+                    runSpacing: AppConstants.smallPadding,
+                    children: RentalVanListing.rentalStatuses.map((s) {
+                      final color = Color(
+                          RentalVanListing.rentalStatusColors[s] ??
+                              0xFF9E9E9E);
+                      final count = statusBreakdown[s] ?? 0;
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: 110,
+                          maxWidth: (constraints.maxWidth > 700
+                              ? constraints.maxWidth / 5
+                              : constraints.maxWidth > 400
+                                  ? constraints.maxWidth / 3
+                                  : constraints.maxWidth / 2) -
+                              AppConstants.smallPadding,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border:
+                                Border.all(color: color.withOpacity(0.35)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                  radius: 5, backgroundColor: color),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  s[0].toUpperCase() + s.substring(1),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: color,
+                                      fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                count.toString(),
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: color),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }),
+
+                if (listings.isNotEmpty) ...[
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  const Divider(),
+                  const SizedBox(height: AppConstants.smallPadding),
+
+                  // ── Listings table ────────────────────────────────────
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowHeight: 36,
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 44,
+                      columnSpacing: 20,
+                      columns: const [
+                        DataColumn(
+                            label: Text('Plate',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Brand / Model',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Type',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Price / Day',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('Rental Status',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Visible',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                      ],
+                      rows: listings.map((l) {
+                        final fmt = NumberFormat.currency(
+                            symbol: '₱', decimalDigits: 0);
+                        final rsColor = Color(
+                            RentalVanListing.rentalStatusColors[
+                                    l.rentalStatus] ??
+                                0xFF9E9E9E);
+                        return DataRow(cells: [
+                          DataCell(Text(l.plateNumber,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600))),
+                          DataCell(Text(
+                              l.brand.isNotEmpty ? l.brand : '—')),
+                          DataCell(Text(l.vehicleType[0].toUpperCase() +
+                              l.vehicleType.substring(1))),
+                          DataCell(Text(fmt.format(l.pricePerDay))),
+                          DataCell(Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: rsColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              l.rentalStatus[0].toUpperCase() +
+                                  l.rentalStatus.substring(1),
+                              style: TextStyle(
+                                  color: rsColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11),
+                            ),
+                          )),
+                          DataCell(Icon(
+                            l.isAvailable
+                                ? Icons.check_circle
+                                : Icons.cancel,
+                            color: l.isAvailable
+                                ? Colors.green
+                                : Colors.red,
+                            size: 18,
+                          )),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2024,7 +2232,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       }
       final topRoutes = routeBookings.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-      
+
+      // Fetch rental listings before entering the PDF builder where
+      // pw.Context shadows Flutter's BuildContext.
+      final rentalListings =
+          Provider.of<RentalVanListingProvider>(context, listen: false)
+              .listings;
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -2251,7 +2465,116 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                   )),
                 ],
               ),
-              
+
+              // Rental Vans Summary
+              pw.SizedBox(height: 24),
+              pw.Text(
+                'Rental Vans Summary',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              ...() {
+                if (rentalListings.isEmpty) {
+                  return <pw.Widget>[
+                    pw.Text(
+                      'No rental van listings configured.',
+                      style: const pw.TextStyle(
+                          fontSize: 11, color: PdfColors.grey700),
+                    ),
+                  ];
+                }
+                final statusBreakdown = <String, int>{};
+                for (final s in RentalVanListing.rentalStatuses) {
+                  statusBreakdown[s] =
+                      rentalListings.where((l) => l.rentalStatus == s).length;
+                }
+                return <pw.Widget>[
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.teal50,
+                      borderRadius:
+                          const pw.BorderRadius.all(pw.Radius.circular(8)),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Total: ${rentalListings.length}  |  '
+                          'Visible: ${rentalListings.where((l) => l.isAvailable).length}  |  '
+                          'Hidden: ${rentalListings.where((l) => !l.isAvailable).length}',
+                          style: pw.TextStyle(
+                              fontSize: 11,
+                              fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Row(
+                          mainAxisAlignment:
+                              pw.MainAxisAlignment.spaceBetween,
+                          children:
+                              RentalVanListing.rentalStatuses.map((s) {
+                            return pw.Column(children: [
+                              pw.Text(
+                                (statusBreakdown[s] ?? 0).toString(),
+                                style: pw.TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: pw.FontWeight.bold),
+                              ),
+                              pw.Text(
+                                s[0].toUpperCase() + s.substring(1),
+                                style: const pw.TextStyle(
+                                    fontSize: 9,
+                                    color: PdfColors.grey700),
+                              ),
+                            ]);
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey300),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(1.5),
+                      1: const pw.FlexColumnWidth(2),
+                      2: const pw.FlexColumnWidth(1),
+                      3: const pw.FlexColumnWidth(1.5),
+                      4: const pw.FlexColumnWidth(1.5),
+                      5: const pw.FlexColumnWidth(0.8),
+                    },
+                    children: [
+                      pw.TableRow(
+                        decoration:
+                            const pw.BoxDecoration(color: PdfColors.grey200),
+                        children: [
+                          _buildTableHeader('Plate'),
+                          _buildTableHeader('Brand / Model'),
+                          _buildTableHeader('Type'),
+                          _buildTableHeader('Price / Day'),
+                          _buildTableHeader('Rental Status'),
+                          _buildTableHeader('Visible'),
+                        ],
+                      ),
+                      ...rentalListings.map(
+                        (l) => pw.TableRow(children: [
+                          _buildTableCell(l.plateNumber),
+                          _buildTableCell(
+                              l.brand.isNotEmpty ? l.brand : '—'),
+                          _buildTableCell(l.vehicleType[0].toUpperCase() +
+                              l.vehicleType.substring(1)),
+                          _buildTableCell(
+                              '₱${NumberFormat('#,##0', 'en_US').format(l.pricePerDay)}/day'),
+                          _buildTableCell(l.rentalStatus[0].toUpperCase() +
+                              l.rentalStatus.substring(1)),
+                          _buildTableCell(l.isAvailable ? 'Yes' : 'No'),
+                        ]),
+                      ),
+                    ],
+                  ),
+                ];
+              }(),
+
               // Trip History Section
               pw.SizedBox(height: 24),
               pw.Text(

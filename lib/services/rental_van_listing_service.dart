@@ -85,6 +85,18 @@ class RentalVanListingService {
     }
   }
 
+  Future<void> updateRentalStatus(String id, String status) async {
+    try {
+      await _firestore.collection(_collection).doc(id).update({
+        'rentalStatus': status,
+        'updatedAt': DateTime.now(),
+      });
+    } catch (e) {
+      print('RentalVanListingService.updateRentalStatus: $e');
+      rethrow;
+    }
+  }
+
   Future<void> deleteListing(String id) async {
     try {
       await _firestore.collection(_collection).doc(id).delete();

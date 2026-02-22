@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/rental_van_listing_model.dart';
 import '../models/van_rental_model.dart';
+import '../models/van_rental_request_model.dart';
 import '../models/van_model.dart';
 import '../providers/rental_van_listing_provider.dart';
 import '../providers/van_rental_provider.dart';
+import '../providers/van_rental_request_provider.dart';
 import '../providers/van_provider.dart';
 import '../utils/constants.dart';
 
@@ -98,9 +100,9 @@ class _RentalRequestsTabLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<VanRentalProvider>(
+    return Consumer<VanRentalRequestProvider>(
       builder: (_, provider, __) {
-        final pending = provider.pendingRentals.length;
+        final pending = provider.pendingRequests.length;
         return Tab(
           iconMargin: const EdgeInsets.only(bottom: 2),
           child: Row(
@@ -378,6 +380,11 @@ class _ListingCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 _badge(listing.vehicleType.toUpperCase(),
                     Colors.blueGrey[700]!),
+                const SizedBox(width: 6),
+                _badge(
+                  listing.isAvailable ? 'AVAILABLE' : 'RENTED',
+                  listing.isAvailable ? Colors.green[700]! : Colors.red[700]!,
+                ),
                 const Spacer(),
                 Tooltip(
                   message: listing.isAvailable
@@ -599,6 +606,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
   bool _isSaving = false;
 
   Van? _selectedVan;
+  final _plateCtrl = TextEditingController();
   final _brandCtrl = TextEditingController();
   final _colorCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
@@ -620,6 +628,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
     super.initState();
     final e = widget.existing;
     if (e != null) {
+      _plateCtrl.text = e.plateNumber;
       _brandCtrl.text = e.brand;
       _colorCtrl.text = e.color;
       _priceCtrl.text = e.pricePerDay.toStringAsFixed(2);
@@ -639,7 +648,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
   @override
   void dispose() {
     for (final c in [
-      _brandCtrl, _colorCtrl, _priceCtrl, _minDaysCtrl,
+      _plateCtrl, _brandCtrl, _colorCtrl, _priceCtrl, _minDaysCtrl,
       _maxDaysCtrl, _pickupCtrl, _descCtrl, _notesCtrl, _imgCtrl,
     ]) {
       c.dispose();
@@ -697,6 +706,22 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
                   children: [
                     _sec('Van Details'),
                     _buildVanSelector(context),
+                    const SizedBox(height: AppConstants.smallPadding),
+                    _tf(
+                      _plateCtrl,
+                      'Plate Number *',
+                      hint: 'e.g. ABC 1234',
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[a-zA-Z0-9 ]')),
+                        TextInputFormatter.withFunction(
+                          (old, newVal) => newVal.copyWith(
+                            text: newVal.text.toUpperCase()),
+                        ),
+                      ],
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
                     const SizedBox(height: AppConstants.smallPadding),
                     Row(children: [
                       Expanded(
@@ -935,8 +960,9 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
               .toList(),
           onChanged: (v) => setState(() {
             _selectedVan = v;
-            if (v != null && _brandCtrl.text.isEmpty) {
-              _brandCtrl.text = v.vehicleType;
+            if (v != null) {
+              _plateCtrl.text = v.plateNumber;
+              if (_brandCtrl.text.isEmpty) _brandCtrl.text = v.vehicleType;
             }
           }),
         );
@@ -1027,7 +1053,9 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
     final listing = RentalVanListing(
       id: e?.id ?? '',
       vanId: van?.id ?? e?.vanId ?? '',
-      plateNumber: van?.plateNumber ?? e?.plateNumber ?? '',
+      plateNumber: _plateCtrl.text.trim().toUpperCase().isNotEmpty
+          ? _plateCtrl.text.trim().toUpperCase()
+          : van?.plateNumber ?? e?.plateNumber ?? '',
       vehicleType: van?.vehicleType ?? e?.vehicleType ?? 'van',
       capacity: van?.capacity ?? e?.capacity ?? 0,
       brand: _brandCtrl.text.trim(),
@@ -1085,7 +1113,7 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
   final _searchCtrl = TextEditingController();
 
   final List<String> _statuses = [
-    'all', 'pending', 'confirmed', 'active', 'completed', 'cancelled'
+    'all', 'pending', 'approved', 'rejected', 'completed', 'cancelled'
   ];
 
   @override
@@ -1147,25 +1175,25 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
   }
 
   Widget _buildList(BuildContext context) {
-    return Consumer<VanRentalProvider>(
+    return Consumer<VanRentalRequestProvider>(
       builder: (_, provider, __) {
-        if (provider.isLoading && provider.rentals.isEmpty) {
+        if (provider.isLoading && provider.requests.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        var items = provider.rentals;
+        var items = provider.requests;
 
         if (_statusFilter != 'all') {
           items = items
-              .where((r) => r.rentalStatus == _statusFilter)
+              .where((r) => r.status == _statusFilter)
               .toList();
         }
 
         if (_search.isNotEmpty) {
           items = items.where((r) {
-            return r.userName.toLowerCase().contains(_search) ||
-                r.userEmail.toLowerCase().contains(_search) ||
-                r.vanPlateNumber.toLowerCase().contains(_search);
+            return r.brand.toLowerCase().contains(_search) ||
+                r.pickupLocation.toLowerCase().contains(_search) ||
+                r.purpose.toLowerCase().contains(_search);
           }).toList();
         }
 
@@ -1178,7 +1206,7 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
                     size: 72, color: Colors.grey[300]),
                 const SizedBox(height: AppConstants.defaultPadding),
                 Text(
-                  provider.rentals.isEmpty
+                  provider.requests.isEmpty
                       ? 'No rental requests yet.\nRental requests from users will appear here.'
                       : 'No requests match your filters.',
                   textAlign: TextAlign.center,
@@ -1195,7 +1223,7 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
           separatorBuilder: (_, __) =>
               const SizedBox(height: AppConstants.smallPadding),
           itemBuilder: (_, i) =>
-              _RequestCard(rental: items[i], provider: provider),
+              _RequestCard(request: items[i], provider: provider),
         );
       },
     );
@@ -1205,10 +1233,10 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
 // ── Rental request card ───────────────────────────────────────────────────────
 
 class _RequestCard extends StatelessWidget {
-  final VanRental rental;
-  final VanRentalProvider provider;
+  final VanRentalRequest request;
+  final VanRentalRequestProvider provider;
 
-  const _RequestCard({required this.rental, required this.provider});
+  const _RequestCard({required this.request, required this.provider});
 
   @override
   Widget build(BuildContext context) {
@@ -1226,90 +1254,96 @@ class _RequestCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Header row: brand + status badge ─────────────────────
               Row(
                 children: [
                   CircleAvatar(
                     radius: 20,
                     backgroundColor:
                         Theme.of(context).primaryColor.withOpacity(0.12),
-                    child: Text(
-                      rental.userName.isNotEmpty
-                          ? rental.userName[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                          color: Theme.of(context).primaryColor,
-                          fontWeight: FontWeight.bold),
-                    ),
+                    child: const Icon(Icons.directions_bus, size: 20),
                   ),
                   const SizedBox(width: AppConstants.smallPadding),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(rental.userName,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
-                        Text(rental.userEmail,
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[600])),
+                        Text(
+                          request.brand.isNotEmpty
+                              ? request.brand
+                              : 'Van Rental Request',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        Text(
+                          'Purpose: ${request.purpose.isNotEmpty ? request.purpose : '—'}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[600]),
+                        ),
                       ],
                     ),
                   ),
-                  _statusBadge(rental.rentalStatus),
+                  _statusBadge(request.status),
                 ],
               ),
 
               const Divider(height: AppConstants.largePadding),
 
+              // ── Details row ──────────────────────────────────────────
               Wrap(
                 spacing: AppConstants.largePadding,
                 runSpacing: 4,
                 children: [
-                  _chip(Icons.directions_bus, rental.vanPlateNumber),
+                  _chip(Icons.location_on_outlined, request.pickupLocation),
+                  _chip(Icons.person,
+                      request.dropoffLocation),
                   _chip(Icons.calendar_today,
-                      '${df.format(rental.startDate)} → ${df.format(rental.endDate)}'),
-                  _chip(Icons.timer, '${rental.numberOfDays} day(s)'),
-                  _chip(Icons.attach_money,
-                      '${fmt.format(rental.pricePerDay)}/day'),
+                      '${df.format(request.rentalStartDate)} → ${df.format(request.rentalEndDate)}'),
+                  _chip(Icons.timer, '${request.totalDays} day(s)'),
+                  _chip(Icons.payments,
+                      '${fmt.format(request.pricePerDay)}/day'),
                 ],
               ),
 
               const SizedBox(height: AppConstants.smallPadding),
 
+              // ── Total + action buttons ────────────────────────────────
               Row(
                 children: [
                   Text(
-                    fmt.format(rental.totalAmount),
+                    fmt.format(request.totalAmount),
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                         color: Theme.of(context).primaryColor),
                   ),
-                  const SizedBox(width: AppConstants.smallPadding),
-                  _paymentBadge(rental.paymentStatus),
                   const Spacer(),
-                  if (rental.rentalStatus == 'pending')
-                    _actionBtn(
-                        Icons.check_circle_outline,
-                        Colors.blue,
-                        'Confirm',
-                        () => provider.confirmRental(rental.id)),
-                  if (rental.rentalStatus == 'confirmed')
-                    _actionBtn(
-                        Icons.play_arrow_outlined,
-                        Colors.green,
-                        'Activate',
-                        () => provider.activateRental(rental.id)),
-                  if (rental.rentalStatus == 'active')
-                    _actionBtn(
-                        Icons.done_all,
-                        Colors.blueGrey,
-                        'Complete',
-                        () => provider.completeRental(rental.id)),
-                  if (rental.rentalStatus != 'cancelled' &&
-                      rental.rentalStatus != 'completed')
+                  // Approve button — shown only for pending requests
+                  if (request.status == 'pending')
+                    ElevatedButton.icon(
+                      onPressed: () => provider.approveRequest(request.id),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Approve'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  if (request.status == 'approved')
+                    _actionBtn(Icons.done_all, Colors.blueGrey,
+                        'Mark Complete',
+                        () => provider.completeRequest(request.id)),
+                  if (request.status != 'cancelled' &&
+                      request.status != 'completed' &&
+                      request.status != 'rejected') ...[
+                    const SizedBox(width: 6),
                     _actionBtn(Icons.cancel_outlined, Colors.red,
-                        'Cancel', () => _cancelDialog(context)),
+                        'Reject / Cancel',
+                        () => _rejectDialog(context)),
+                  ],
                 ],
               ),
             ],
@@ -1319,16 +1353,16 @@ class _RequestCard extends StatelessWidget {
     );
   }
 
-  void _cancelDialog(BuildContext context) {
+  void _rejectDialog(BuildContext context) {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Cancel Rental Request'),
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Reject / Cancel Request'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Confirm cancellation of this rental request?'),
+            const Text('Confirm rejection of this rental request?'),
             const SizedBox(height: AppConstants.defaultPadding),
             TextField(
               controller: ctrl,
@@ -1340,17 +1374,16 @@ class _RequestCard extends StatelessWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('Back')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              Navigator.pop(context);
-              provider.cancelRental(rental.id,
-                  reason: ctrl.text.trim());
+              final reason = ctrl.text.trim();
+              Navigator.pop(dialogCtx);
+              provider.rejectRequest(request.id, reason: reason);
             },
-            child: const Text('Cancel Rental'),
+            child: const Text('Reject'),
           ),
         ],
       ),
@@ -1382,7 +1415,8 @@ class _RequestCard extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.symmetric(
                     vertical: AppConstants.smallPadding),
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                     color: Colors.grey[300],
                     borderRadius: BorderRadius.circular(2)),
@@ -1400,68 +1434,107 @@ class _RequestCard extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close)),
             ]),
-            Wrap(spacing: 8, children: [
-              _statusBadge(rental.rentalStatus),
-              _paymentBadge(rental.paymentStatus),
-            ]),
+            _statusBadge(request.status),
             const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Renter', rental.userName),
-            _dtRow(context, 'Email', rental.userEmail),
-            _dtRow(context, 'Phone', rental.userPhone),
+            _dtRow(context, 'Payment',
+                request.paymentStatus == 'paid' ? '✅ Paid' : '⏳ Pending'),
+            _dtRow(context, 'Brand / Model',
+                request.brand.isNotEmpty ? request.brand : '—'),
+            _dtRow(context, 'Pickup', request.pickupLocation),
+            _dtRow(context, 'Name', request.dropoffLocation),
+            _dtRow(context, 'Purpose', request.purpose),
+            if (request.specialRequirements.isNotEmpty)
+              _dtRow(context, 'Special Req.',
+                  request.specialRequirements),
             const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Van Plate', rental.vanPlateNumber),
-            _dtRow(context, 'Driver', rental.driverName),
-            _dtRow(context, 'Driver Contact', rental.driverContact),
-            const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Pickup', rental.pickupAddress),
-            _dtRow(context, 'Dropoff', rental.dropoffAddress),
-            _dtRow(context, 'Start Date', df.format(rental.startDate)),
-            _dtRow(context, 'End Date', df.format(rental.endDate)),
-            _dtRow(context, 'Duration', '${rental.numberOfDays} day(s)'),
-            _dtRow(context, 'Passengers',
-                '${rental.passengerCount} pax'),
-            if (rental.purpose.isNotEmpty)
-              _dtRow(context, 'Purpose', rental.purpose),
-            if (rental.specialRequests.isNotEmpty)
-              _dtRow(context, 'Requests', rental.specialRequests),
-            const Divider(height: AppConstants.largePadding),
+            _dtRow(context, 'Start Date',
+                df.format(request.rentalStartDate)),
+            _dtRow(context, 'End Date',
+                df.format(request.rentalEndDate)),
+            _dtRow(context, 'Duration', '${request.totalDays} day(s)'),
             _dtRow(context, 'Price / Day',
-                fmt.format(rental.pricePerDay)),
-            if (rental.additionalCharges > 0)
-              _dtRow(context, 'Extra Charges',
-                  fmt.format(rental.additionalCharges)),
-            if (rental.discountAmount > 0)
-              _dtRow(context, 'Discount',
-                  '- ${fmt.format(rental.discountAmount)}'),
-            _dtRow(context, 'Total', fmt.format(rental.totalAmount),
+                fmt.format(request.pricePerDay)),
+            _dtRow(context, 'Total', fmt.format(request.totalAmount),
                 highlight: true),
             const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Payment Method', rental.paymentMethod),
-            _dtRow(context, 'Payment Status',
-                rental.paymentStatus.toUpperCase()),
-            if (rental.paymentReference != null)
-              _dtRow(context, 'Reference',
-                  rental.paymentReference!),
-            const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Booked On',
-                dtf.format(rental.bookingDate)),
-            if (rental.confirmedAt != null)
-              _dtRow(context, 'Confirmed At',
-                  dtf.format(rental.confirmedAt!)),
-            if (rental.activatedAt != null)
-              _dtRow(context, 'Activated At',
-                  dtf.format(rental.activatedAt!)),
-            if (rental.completedAt != null)
+            _dtRow(context, 'Submitted On', dtf.format(request.createdAt)),
+            if (request.confirmedAt != null)
+              _dtRow(context, 'Approved At',
+                  dtf.format(request.confirmedAt!)),
+            if (request.completedAt != null)
               _dtRow(context, 'Completed At',
-                  dtf.format(rental.completedAt!)),
-            if (rental.cancelledAt != null)
+                  dtf.format(request.completedAt!)),
+            if (request.cancelledAt != null)
               _dtRow(context, 'Cancelled At',
-                  dtf.format(rental.cancelledAt!)),
-            if (rental.cancellationReason != null &&
-                rental.cancellationReason!.isNotEmpty)
-              _dtRow(context, 'Cancel Reason',
-                  rental.cancellationReason!),
+                  dtf.format(request.cancelledAt!)),
+            if (request.cancellationReason != null &&
+                request.cancellationReason!.isNotEmpty)
+              _dtRow(context, 'Reason', request.cancellationReason!),
             const SizedBox(height: AppConstants.largePadding * 2),
+            // Action buttons in detail sheet
+            if (request.status == 'pending' || request.paymentStatus != 'paid')
+              Padding(
+                padding: const EdgeInsets.only(
+                    bottom: AppConstants.defaultPadding),
+                child: Column(
+                  children: [
+                    if (request.paymentStatus != 'paid')
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            provider.markAsPaid(request.id);
+                          },
+                          icon: const Icon(Icons.payments_outlined),
+                          label: const Text('Mark as Paid'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal[700],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    if (request.status == 'pending') ...[  
+                      const SizedBox(height: AppConstants.smallPadding),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                provider.approveRequest(request.id);
+                              },
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Approve Request'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[700],
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppConstants.smallPadding),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _rejectDialog(context);
+                              },
+                              icon: const Icon(Icons.cancel_outlined,
+                                  color: Colors.red),
+                              label: const Text('Reject',
+                                  style: TextStyle(color: Colors.red)),
+                              style: OutlinedButton.styleFrom(
+                                side:
+                                    const BorderSide(color: Colors.red),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1473,21 +1546,24 @@ class _RequestCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(
           vertical: AppConstants.smallPadding / 2),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-            width: 140,
-            child: Text(label,
-                style:
-                    TextStyle(color: Colors.grey[600], fontSize: 13))),
-        Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: highlight
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                    color: highlight ? const Color(0xFF4CAF50) : null))),
-      ]),
+      child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+                width: 140,
+                child: Text(label,
+                    style: TextStyle(
+                        color: Colors.grey[600], fontSize: 13))),
+            Expanded(
+                child: Text(value,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: highlight
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color:
+                            highlight ? const Color(0xFF4CAF50) : null))),
+          ]),
     );
   }
 
@@ -1516,7 +1592,7 @@ class _RequestCard extends StatelessWidget {
   }
 
   Widget _statusBadge(String status) {
-    const cm = VanRental.statusColors;
+    final cm = VanRentalRequest.statusColors;
     final color = Color(cm[status] ?? 0xFF9E9E9E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1534,23 +1610,17 @@ class _RequestCard extends StatelessWidget {
   }
 
   Widget _paymentBadge(String ps) {
-    final Map<String, int> cm = {
-      'pending': 0xFFF57C00,
-      'paid': 0xFF4CAF50,
-      'failed': 0xFFB00020,
-      'refunded': 0xFF607D8B,
-    };
+    final cm = VanRentalRequest.paymentColors;
     final color = Color(cm[ps] ?? 0xFF9E9E9E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
           color: color.withOpacity(0.12),
           borderRadius: BorderRadius.circular(10)),
-      child: Text(ps[0].toUpperCase() + ps.substring(1),
-          style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w600)),
+      child: Text(
+        ps == 'paid' ? '✓ Paid' : '⏳ Unpaid',
+        style: TextStyle(
+            color: color, fontSize: 10, fontWeight: FontWeight.w600)),
     );
   }
 }
