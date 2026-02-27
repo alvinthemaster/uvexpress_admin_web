@@ -27,6 +27,7 @@ class AppConstants {
   static const String routesRoute = '/routes';
   static const String discountsRoute = '/discounts';
   static const String vanRentalsRoute = '/van-rentals';
+  static const String documentDeliveriesRoute = '/document-deliveries';
   static const String analyticsRoute = '/analytics';
   static const String settingsRoute = '/settings';
 
@@ -36,6 +37,7 @@ class AppConstants {
   static const String bookingsCollection = 'bookings';
   static const String discountsCollection = 'discounts';
   static const String vanRentalsCollection = 'van_rentals';
+  static const String documentDeliveriesCollection = 'document_deliveries';
   static const String schedulesCollection = 'schedules';
   static const String adminUsersCollection = 'admin_users';
   static const String analyticsCollection = 'analytics';
@@ -189,6 +191,8 @@ class AppStrings {
   static const String profile = 'Profile';
   static const String vanRentals = 'Van Rentals';
   static const String vanRentalManagement = 'Van Rental Management';
+  static const String documentDeliveries = 'Document Deliveries';
+  static const String documentDeliveryManagement = 'Document Delivery Management';
 
   // Van Management
   static const String vanManagement = 'Van Management';

@@ -19,6 +19,7 @@ import 'screens/route_management_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/van_rental_screen.dart';
+import 'screens/document_delivery_screen.dart';
 import 'widgets/layouts/main_layout.dart';
 import 'utils/constants.dart';
 
@@ -173,6 +174,10 @@ class GodtrascoAdminApp extends StatelessWidget {
             GoRoute(
               path: AppConstants.vanRentalsRoute,
               builder: (context, state) => const VanRentalScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.documentDeliveriesRoute,
+              builder: (context, state) => const DocumentDeliveryScreen(),
             ),
             GoRoute(
               path: AppConstants.analyticsRoute,
