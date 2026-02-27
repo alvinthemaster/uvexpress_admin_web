@@ -11,6 +11,7 @@ import 'providers/booking_provider.dart';
 import 'providers/van_rental_provider.dart';
 import 'providers/van_rental_request_provider.dart';
 import 'providers/rental_van_listing_provider.dart';
+import 'providers/user_management_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/van_management_screen.dart';
@@ -20,6 +21,7 @@ import 'screens/analytics_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/van_rental_screen.dart';
 import 'screens/document_delivery_screen.dart';
+import 'screens/user_management_screen.dart';
 import 'widgets/layouts/main_layout.dart';
 import 'utils/constants.dart';
 
@@ -47,6 +49,7 @@ class GodtrascoAdminApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VanRentalProvider()),
         ChangeNotifierProvider(create: (_) => VanRentalRequestProvider()),
         ChangeNotifierProvider(create: (_) => RentalVanListingProvider()),
+        ChangeNotifierProvider(create: (_) => UserManagementProvider()),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
@@ -182,6 +185,10 @@ class GodtrascoAdminApp extends StatelessWidget {
             GoRoute(
               path: AppConstants.analyticsRoute,
               builder: (context, state) => const AnalyticsScreen(),
+            ),
+            GoRoute(
+              path: AppConstants.usersRoute,
+              builder: (context, state) => const UserManagementScreen(),
             ),
             GoRoute(
               path: AppConstants.settingsRoute,

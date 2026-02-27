@@ -13,7 +13,7 @@ class DocumentDelivery {
   final String deliveryStatus; // pending, picked_up, in_transit, delivered, cancelled
   final String paymentStatus;  // pending, paid, failed, refunded
   final String paymentMethod;
-  final double deliveryFee;
+  final double bookingFee;
   final double paymentAmount;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -40,7 +40,7 @@ class DocumentDelivery {
     required this.deliveryStatus,
     required this.paymentStatus,
     required this.paymentMethod,
-    required this.deliveryFee,
+    required this.bookingFee,
     required this.paymentAmount,
     required this.createdAt,
     this.updatedAt,
@@ -85,7 +85,7 @@ class DocumentDelivery {
       deliveryStatus: data['deliveryStatus'] ?? data['delivery_status'] ?? data['status'] ?? 'pending',
       paymentStatus: data['paymentStatus'] ?? data['payment_status'] ?? 'unpaid',
       paymentMethod: data['paymentMethod'] ?? data['payment_method'] ?? '',
-      deliveryFee: (data['deliveryFee'] ?? data['delivery_fee'] ?? data['fee'] ?? 0).toDouble(),
+      bookingFee: (data['bookingFee'] ?? data['booking_fee'] ?? data['fee'] ?? 0).toDouble(),
       paymentAmount: (data['paymentAmount'] ?? data['payment_amount'] ?? data['amount'] ?? 0).toDouble(),
       createdAt: _parseDate(data['createdAt'] ?? data['created_at'] ?? data['bookingDate']),
       updatedAt: _parseDateNullable(data['updatedAt'] ?? data['updated_at']),
@@ -114,7 +114,7 @@ class DocumentDelivery {
       'deliveryStatus': deliveryStatus,
       'paymentStatus': paymentStatus,
       'paymentMethod': paymentMethod,
-      'deliveryFee': deliveryFee,
+      'bookingFee': bookingFee,
       'paymentAmount': paymentAmount,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : FieldValue.serverTimestamp(),
@@ -155,7 +155,7 @@ class DocumentDelivery {
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       paymentMethod: paymentMethod,
-      deliveryFee: deliveryFee,
+      bookingFee: bookingFee,
       paymentAmount: paymentAmount,
       createdAt: createdAt,
       updatedAt: DateTime.now(),

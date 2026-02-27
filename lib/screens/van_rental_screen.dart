@@ -3,11 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/rental_van_listing_model.dart';
-import '../models/van_rental_model.dart';
 import '../models/van_rental_request_model.dart';
 import '../models/van_model.dart';
 import '../providers/rental_van_listing_provider.dart';
-import '../providers/van_rental_provider.dart';
 import '../providers/van_rental_request_provider.dart';
 import '../providers/van_provider.dart';
 import '../utils/constants.dart';
@@ -550,19 +548,19 @@ class _ListingCard extends StatelessWidget {
       RentalVanListingProvider provider) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Remove Listing'),
         content: Text(
             'Remove "${listing.plateNumber}" from rental listings?\n\nThis will hide it from the user app.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           ElevatedButton(
             style:
                 ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
               provider.deleteListing(listing.id);
             },
             child: const Text('Remove'),
@@ -1232,11 +1230,45 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
 
 // ── Rental request card ───────────────────────────────────────────────────────
 
-class _RequestCard extends StatelessWidget {
+class _RequestCard extends StatefulWidget {
   final VanRentalRequest request;
   final VanRentalRequestProvider provider;
 
   const _RequestCard({required this.request, required this.provider});
+
+  @override
+  State<_RequestCard> createState() => _RequestCardState();
+}
+
+class _RequestCardState extends State<_RequestCard> {
+  bool _isActing = false;
+
+  VanRentalRequest get request => widget.request;
+  VanRentalRequestProvider get provider => widget.provider;
+
+  Future<void> _doAction(Future<bool> Function() action, String successMsg) async {
+    setState(() => _isActing = true);
+    try {
+      final ok = await action();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok ? successMsg : 'Error: ${provider.errorMessage ?? 'Unknown error'}'),
+          backgroundColor: ok ? Colors.green[700] : Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1321,9 +1353,18 @@ class _RequestCard extends StatelessWidget {
                   // Approve button — shown only for pending requests
                   if (request.status == 'pending')
                     ElevatedButton.icon(
-                      onPressed: () => provider.approveRequest(request.id),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Approve'),
+                      onPressed: _isActing
+                          ? null
+                          : () => _doAction(
+                                () => provider.approveRequest(request.id),
+                                'Request approved successfully!',
+                              ),
+                      icon: _isActing
+                          ? const SizedBox(
+                              width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check_circle_outline, size: 16),
+                      label: Text(_isActing ? 'Processing…' : 'Approve'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green[700],
                         foregroundColor: Colors.white,
@@ -1335,7 +1376,10 @@ class _RequestCard extends StatelessWidget {
                   if (request.status == 'approved')
                     _actionBtn(Icons.done_all, Colors.blueGrey,
                         'Mark Complete',
-                        () => provider.completeRequest(request.id)),
+                        () => _doAction(
+                              () => provider.completeRequest(request.id),
+                              'Marked as completed!',
+                            )),
                   if (request.status != 'cancelled' &&
                       request.status != 'completed' &&
                       request.status != 'rejected') ...[
@@ -1344,6 +1388,11 @@ class _RequestCard extends StatelessWidget {
                         'Reject / Cancel',
                         () => _rejectDialog(context)),
                   ],
+                  // Manual status updater (always visible)
+                  const SizedBox(width: 6),
+                  _actionBtn(Icons.edit_note, Colors.blueGrey,
+                      'Update Status',
+                      () => _updateStatusDialog(context)),
                 ],
               ),
             ],
@@ -1381,11 +1430,72 @@ class _RequestCard extends StatelessWidget {
             onPressed: () {
               final reason = ctrl.text.trim();
               Navigator.pop(dialogCtx);
-              provider.rejectRequest(request.id, reason: reason);
+              _doAction(
+                () => provider.rejectRequest(request.id, reason: reason),
+                'Request rejected.',
+              );
             },
             child: const Text('Reject'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _updateStatusDialog(BuildContext context) {
+    String? selected = request.status;
+    const statuses = ['pending', 'approved', 'rejected', 'completed', 'cancelled'];
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (_, setDs) => AlertDialog(
+          title: const Text('Update Request Status'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: statuses.map((s) {
+              final color = Color(VanRentalRequest.statusColors[s] ?? 0xFF9E9E9E);
+              return RadioListTile<String>(
+                value: s,
+                groupValue: selected,
+                onChanged: (v) => setDs(() => selected = v),
+                title: Text(
+                  s[0].toUpperCase() + s.substring(1),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                ),
+                activeColor: color,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: selected == null || selected == request.status
+                  ? null
+                  : () {
+                      final newStatus = selected!;
+                      Navigator.pop(dialogCtx);
+                      _doAction(() async {
+                        switch (newStatus) {
+                          case 'approved':
+                            return provider.approveRequest(request.id);
+                          case 'completed':
+                            return provider.completeRequest(request.id);
+                          case 'rejected':
+                          case 'cancelled':
+                            return provider.rejectRequest(request.id);
+                          default:
+                            return false;
+                        }
+                      }, 'Status updated to "$newStatus"');
+                    },
+              child: const Text('Update'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1401,141 +1511,199 @@ class _RequestCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => DraggableScrollableSheet(
+      builder: (sheetCtx) => DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.82,
+        initialChildSize: 0.85,
         maxChildSize: 0.95,
         minChildSize: 0.5,
-        builder: (_, sc) => ListView(
-          controller: sc,
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppConstants.defaultPadding),
-          children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(
-                    vertical: AppConstants.smallPadding),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Row(children: [
-              Expanded(
-                child: Text('Rental Request Detail',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-              ),
-              IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close)),
-            ]),
-            _statusBadge(request.status),
-            const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Payment',
-                request.paymentStatus == 'paid' ? '✅ Paid' : '⏳ Pending'),
-            _dtRow(context, 'Brand / Model',
-                request.brand.isNotEmpty ? request.brand : '—'),
-            _dtRow(context, 'Pickup', request.pickupLocation),
-            _dtRow(context, 'Name', request.dropoffLocation),
-            _dtRow(context, 'Purpose', request.purpose),
-            if (request.specialRequirements.isNotEmpty)
-              _dtRow(context, 'Special Req.',
-                  request.specialRequirements),
-            const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Start Date',
-                df.format(request.rentalStartDate)),
-            _dtRow(context, 'End Date',
-                df.format(request.rentalEndDate)),
-            _dtRow(context, 'Duration', '${request.totalDays} day(s)'),
-            _dtRow(context, 'Price / Day',
-                fmt.format(request.pricePerDay)),
-            _dtRow(context, 'Total', fmt.format(request.totalAmount),
-                highlight: true),
-            const Divider(height: AppConstants.largePadding),
-            _dtRow(context, 'Submitted On', dtf.format(request.createdAt)),
-            if (request.confirmedAt != null)
-              _dtRow(context, 'Approved At',
-                  dtf.format(request.confirmedAt!)),
-            if (request.completedAt != null)
-              _dtRow(context, 'Completed At',
-                  dtf.format(request.completedAt!)),
-            if (request.cancelledAt != null)
-              _dtRow(context, 'Cancelled At',
-                  dtf.format(request.cancelledAt!)),
-            if (request.cancellationReason != null &&
-                request.cancellationReason!.isNotEmpty)
-              _dtRow(context, 'Reason', request.cancellationReason!),
-            const SizedBox(height: AppConstants.largePadding * 2),
-            // Action buttons in detail sheet
-            if (request.status == 'pending' || request.paymentStatus != 'paid')
-              Padding(
-                padding: const EdgeInsets.only(
-                    bottom: AppConstants.defaultPadding),
-                child: Column(
-                  children: [
-                    if (request.paymentStatus != 'paid')
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            provider.markAsPaid(request.id);
-                          },
-                          icon: const Icon(Icons.payments_outlined),
-                          label: const Text('Mark as Paid'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal[700],
-                            foregroundColor: Colors.white,
+        builder: (_, sc) => Consumer<VanRentalRequestProvider>(
+          builder: (_, liveProvider, __) {
+            // use live request from provider; fall back to captured request
+            final liveReq = liveProvider.requests
+                .firstWhere((r) => r.id == request.id,
+                    orElse: () => request);
+            return ListView(
+              controller: sc,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppConstants.defaultPadding),
+              children: [
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(
+                        vertical: AppConstants.smallPadding),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                Row(children: [
+                  Expanded(
+                    child: Text('Rental Request Detail',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                  IconButton(
+                      onPressed: () => Navigator.pop(sheetCtx),
+                      icon: const Icon(Icons.close)),
+                ]),
+                _statusBadge(liveReq.status),
+                const Divider(height: AppConstants.largePadding),
+                _dtRow(context, 'Payment',
+                    liveReq.paymentStatus == 'paid' ? '✅ Paid' : '⏳ Pending'),
+                _dtRow(context, 'Brand / Model',
+                    liveReq.brand.isNotEmpty ? liveReq.brand : '—'),
+                _dtRow(context, 'Pickup', liveReq.pickupLocation),
+                _dtRow(context, 'Name', liveReq.dropoffLocation),
+                _dtRow(context, 'Purpose', liveReq.purpose),
+                if (liveReq.specialRequirements.isNotEmpty)
+                  _dtRow(context, 'Special Req.',
+                      liveReq.specialRequirements),
+                const Divider(height: AppConstants.largePadding),
+                _dtRow(context, 'Start Date',
+                    df.format(liveReq.rentalStartDate)),
+                _dtRow(context, 'End Date',
+                    df.format(liveReq.rentalEndDate)),
+                _dtRow(context, 'Duration', '${liveReq.totalDays} day(s)'),
+                _dtRow(context, 'Price / Day',
+                    fmt.format(liveReq.pricePerDay)),
+                _dtRow(context, 'Total', fmt.format(liveReq.totalAmount),
+                    highlight: true),
+                const Divider(height: AppConstants.largePadding),
+                _dtRow(context, 'Submitted On', dtf.format(liveReq.createdAt)),
+                if (liveReq.confirmedAt != null)
+                  _dtRow(context, 'Approved At',
+                      dtf.format(liveReq.confirmedAt!)),
+                if (liveReq.completedAt != null)
+                  _dtRow(context, 'Completed At',
+                      dtf.format(liveReq.completedAt!)),
+                if (liveReq.cancelledAt != null)
+                  _dtRow(context, 'Cancelled At',
+                      dtf.format(liveReq.cancelledAt!)),
+                if (liveReq.cancellationReason != null &&
+                    liveReq.cancellationReason!.isNotEmpty)
+                  _dtRow(context, 'Reason', liveReq.cancellationReason!),
+                const SizedBox(height: AppConstants.largePadding * 2),
+                // Action buttons in detail sheet
+                Padding(
+                  padding: const EdgeInsets.only(
+                      bottom: AppConstants.defaultPadding),
+                  child: Column(
+                    children: [
+                      if (liveReq.paymentStatus != 'paid')
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isActing
+                                ? null
+                                : () {
+                                    Navigator.pop(sheetCtx);
+                                    _doAction(
+                                      () => provider.markAsPaid(liveReq.id),
+                                      'Marked as paid!',
+                                    );
+                                  },
+                            icon: const Icon(Icons.payments_outlined),
+                            label: const Text('Mark as Paid'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal[700],
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ),
-                      ),
-                    if (request.status == 'pending') ...[  
+                      if (liveReq.status == 'pending') ...[
+                        const SizedBox(height: AppConstants.smallPadding),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _isActing
+                                    ? null
+                                    : () {
+                                        Navigator.pop(sheetCtx);
+                                        _doAction(
+                                          () => provider.approveRequest(
+                                              liveReq.id),
+                                          'Request approved successfully!',
+                                        );
+                                      },
+                                icon: const Icon(
+                                    Icons.check_circle_outline),
+                                label: const Text('Approve Request'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green[700],
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(
+                                width: AppConstants.smallPadding),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(sheetCtx);
+                                  _rejectDialog(context);
+                                },
+                                icon: const Icon(
+                                    Icons.cancel_outlined,
+                                    color: Colors.red),
+                                label: const Text('Reject',
+                                    style:
+                                        TextStyle(color: Colors.red)),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                      color: Colors.red),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (liveReq.status == 'approved') ...[
+                        const SizedBox(height: AppConstants.smallPadding),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isActing
+                                ? null
+                                : () {
+                                    Navigator.pop(sheetCtx);
+                                    _doAction(
+                                      () => provider.completeRequest(
+                                          liveReq.id),
+                                      'Marked as completed!',
+                                    );
+                                  },
+                            icon: const Icon(Icons.done_all),
+                            label: const Text('Mark as Completed'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueGrey[700],
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: AppConstants.smallPadding),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                provider.approveRequest(request.id);
-                              },
-                              icon: const Icon(Icons.check_circle_outline),
-                              label: const Text('Approve Request'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green[700],
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: AppConstants.smallPadding),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _rejectDialog(context);
-                              },
-                              icon: const Icon(Icons.cancel_outlined,
-                                  color: Colors.red),
-                              label: const Text('Reject',
-                                  style: TextStyle(color: Colors.red)),
-                              style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Colors.red),
-                              ),
-                            ),
-                          ),
-                        ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(sheetCtx);
+                            _updateStatusDialog(context);
+                          },
+                          icon: const Icon(Icons.edit_note),
+                          label: const Text('Update Status'),
+                        ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1577,15 +1745,15 @@ class _RequestCard extends StatelessWidget {
   }
 
   Widget _actionBtn(
-      IconData icon, Color color, String tip, VoidCallback onTap) {
+      IconData icon, Color color, String tip, Function() onTap) {
     return Tooltip(
       message: tip,
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
+        onTap: _isActing ? null : () => onTap(),
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 22, color: color),
+          child: Icon(icon, size: 22, color: _isActing ? Colors.grey : color),
         ),
       ),
     );
@@ -1609,18 +1777,4 @@ class _RequestCard extends StatelessWidget {
     );
   }
 
-  Widget _paymentBadge(String ps) {
-    final cm = VanRentalRequest.paymentColors;
-    final color = Color(cm[ps] ?? 0xFF9E9E9E);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10)),
-      child: Text(
-        ps == 'paid' ? '✓ Paid' : '⏳ Unpaid',
-        style: TextStyle(
-            color: color, fontSize: 10, fontWeight: FontWeight.w600)),
-    );
-  }
 }

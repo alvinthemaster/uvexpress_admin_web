@@ -25,6 +25,8 @@ service cloud.firestore {
       allow create, update, delete: if isSuperAdmin();
     }
 
+
+
     // ── Vans ──────────────────────────────────────────────────────────────────
     // Public read for mobile QR system; authenticated update for occupancy;
     // admin-only create/delete.
@@ -56,9 +58,11 @@ service cloud.firestore {
     }
 
     // ── Users ─────────────────────────────────────────────────────────────────
+    // Mobile app users can read/write their own document.
+    // Admins can read, create, update (includes restrict/unrestrict), and delete any user.
     match /users/{userId} {
-      allow read, write: if isAuthenticated() &&
-                         request.auth.uid == userId;
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read, create, update, delete: if isAdmin();
     }
 
     // ── Schedules ─────────────────────────────────────────────────────────────
@@ -95,6 +99,15 @@ service cloud.firestore {
     match /van_rentals/{rentalId} {
       allow read: if isAuthenticated();
       allow create, update, delete: if isAuthenticated();
+    }
+
+    // ── Document deliveries (from mobile app) ──────────────────────────────────
+    // Users manage their own deliveries; admin web can read/update all.
+    match /document_deliveries/{deliveryId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
   }
 }

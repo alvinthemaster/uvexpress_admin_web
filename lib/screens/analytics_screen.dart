@@ -7,11 +7,15 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../services/booking_service.dart';
 import '../services/van_service.dart';
+import '../services/document_delivery_service.dart';
 import '../models/van_model.dart';
 import '../models/booking_model.dart';
 import '../models/rental_van_listing_model.dart';
+import '../models/document_delivery_model.dart';
+import '../models/van_rental_request_model.dart';
 import '../providers/van_provider.dart';
 import '../providers/rental_van_listing_provider.dart';
+import '../providers/van_rental_request_provider.dart';
 import '../utils/constants.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -24,7 +28,8 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProviderStateMixin {
   final BookingService _bookingService = BookingService();
   final VanService _vanService = VanService();
-  
+  final DocumentDeliveryService _deliveryService = DocumentDeliveryService();
+
   late TabController _tabController;
   String _selectedPeriod = 'week';
   DateTime _selectedDate = DateTime.now();
@@ -37,9 +42,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   DateTime? _tripHistoryEndDate;
   String? _selectedVehicleFilter;
   String? _selectedRouteFilter;
-  List<Map<String, dynamic>> _completedTrips = [];
-  bool _isLoadingTrips = false;
-
   final List<String> _periodOptions = ['day', 'week', 'month', 'year'];
 
   @override
@@ -47,8 +49,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.index == 1 && _completedTrips.isEmpty) {
-        _loadTripHistory();
+      if (_tabController.index == 1) {
+        setState(() {});
       }
     });
     _loadAnalytics();
@@ -94,29 +96,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading analytics: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _loadTripHistory() async {
-    setState(() {
-      _isLoadingTrips = true;
-    });
-
-    try {
-      // Note: We'll use StreamBuilder in the UI instead of loading here
-      // This method just sets the loading state
-      setState(() {
-        _isLoadingTrips = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoadingTrips = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading trip history: $e')),
         );
       }
     }
@@ -367,6 +346,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           ),
           const SizedBox(height: AppConstants.defaultPadding),
           _buildRentalVansSummaryCard(),
+          const SizedBox(height: AppConstants.defaultPadding),
+          _buildVanRentalRequestsSummaryCard(),
+          const SizedBox(height: AppConstants.defaultPadding),
+          _buildDocumentDeliveriesSummaryCard(),
         ],
       ),
     );
@@ -495,6 +478,35 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   Widget _buildRentalVansSummaryCard() {
     return Consumer<RentalVanListingProvider>(
       builder: (_, provider, __) {
+        if (provider.isLoading && provider.listings.isEmpty) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        if (provider.errorMessage != null && provider.listings.isEmpty) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Error loading rental vans: ${provider.errorMessage}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final listings = provider.listings;
         final statusBreakdown = <String, int>{};
         for (final s in RentalVanListing.rentalStatuses) {
@@ -681,6 +693,478 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                                 : Colors.red,
                             size: 18,
                           )),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Van Rental Requests Summary Card ──────────────────────────────────────
+
+  Widget _buildVanRentalRequestsSummaryCard() {
+    return Consumer<VanRentalRequestProvider>(
+      builder: (_, provider, __) {
+        if (provider.isLoading) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+        final requests = provider.requests;
+        const statuses = ['pending', 'approved', 'rejected', 'cancelled', 'completed'];
+        final byStatus = {for (final s in statuses) s: requests.where((r) => r.status == s).length};
+        final paidRevenue = requests
+            .where((r) => r.paymentStatus == 'paid')
+            .fold<double>(0, (s, r) => s + r.totalAmount);
+        final unpaidRevenue = requests
+            .where((r) => r.paymentStatus != 'paid')
+            .fold<double>(0, (s, r) => s + r.totalAmount);
+        final fmt = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
+
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.receipt_long, color: Colors.blue[700], size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Van Rental Requests',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Text(
+                        '${requests.length} total',
+                        style: TextStyle(
+                            color: Colors.blue[800],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppConstants.defaultPadding),
+                Wrap(
+                  spacing: AppConstants.smallPadding,
+                  runSpacing: AppConstants.smallPadding,
+                  children: byStatus.entries.map((e) {
+                    final color =
+                        Color(VanRentalRequest.statusColors[e.key] ?? 0xFF9E9E9E);
+                    return Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: color.withOpacity(0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(radius: 5, backgroundColor: color),
+                          const SizedBox(width: 8),
+                          Text(
+                            e.key[0].toUpperCase() + e.key.substring(1),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: color,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            e.value.toString(),
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: color),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+                if (requests.isNotEmpty) ...[
+                  const SizedBox(height: AppConstants.smallPadding),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.payments, size: 16, color: Colors.green[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Paid: ${fmt.format(paidRevenue)}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[800]),
+                        ),
+                        const SizedBox(width: 16),
+                        Icon(Icons.pending_actions,
+                            size: 16, color: Colors.orange[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Unpaid: ${fmt.format(unpaidRevenue)}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange[800]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  const Divider(),
+                  const SizedBox(height: AppConstants.smallPadding),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowHeight: 36,
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 44,
+                      columnSpacing: 16,
+                      columns: const [
+                        DataColumn(
+                            label: Text('Brand / Model',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Pickup',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Dates',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Total',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('Status',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Payment',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: requests.take(10).map((r) {
+                        final sc = Color(
+                            VanRentalRequest.statusColors[r.status] ?? 0xFF9E9E9E);
+                        final df = DateFormat('MMM dd');
+                        return DataRow(cells: [
+                          DataCell(Text(
+                            r.brand.isNotEmpty ? r.brand : '—',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600),
+                          )),
+                          DataCell(Text(r.pickupLocation.isNotEmpty
+                              ? r.pickupLocation
+                              : '—')),
+                          DataCell(Text(
+                              '${df.format(r.rentalStartDate)} → ${df.format(r.rentalEndDate)}')),
+                          DataCell(Text(fmt.format(r.totalAmount))),
+                          DataCell(Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: sc.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              r.status[0].toUpperCase() + r.status.substring(1),
+                              style: TextStyle(
+                                  color: sc,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11),
+                            ),
+                          )),
+                          DataCell(Text(
+                            r.paymentStatus.toUpperCase(),
+                            style: TextStyle(
+                              color: r.paymentStatus == 'paid'
+                                  ? Colors.green[700]
+                                  : Colors.orange[700],
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
+                          )),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Document Deliveries Summary Card ────────────────────────────────────
+
+  Widget _buildDocumentDeliveriesSummaryCard() {
+    const statusColors = {
+      'pending': Color(0xFFF57C00),
+      'picked_up': Color(0xFF1976D2),
+      'in_transit': Color(0xFF7B1FA2),
+      'delivered': Color(0xFF388E3C),
+      'cancelled': Color(0xFF757575),
+    };
+
+    return StreamBuilder<List<DocumentDelivery>>(
+      stream: _deliveryService.getDeliveriesStream(),
+      builder: (_, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final deliveries = snapshot.data ?? [];
+        final total = deliveries.length;
+        final byStatus = <String, int>{
+          'pending':
+              deliveries.where((d) => d.deliveryStatus == 'pending').length,
+          'picked_up':
+              deliveries.where((d) => d.deliveryStatus == 'picked_up').length,
+          'in_transit':
+              deliveries.where((d) => d.deliveryStatus == 'in_transit').length,
+          'delivered':
+              deliveries.where((d) => d.deliveryStatus == 'delivered').length,
+          'cancelled':
+              deliveries.where((d) => d.deliveryStatus == 'cancelled').length,
+        };
+        final totalRevenue = deliveries
+            .where((d) => d.paymentStatus == 'paid')
+            .fold<double>(0, (s, d) => s + d.paymentAmount);
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(AppConstants.defaultPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ────────────────────────────────────────────
+                Row(
+                  children: [
+                    Icon(Icons.local_shipping,
+                        color: Colors.indigo[700], size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Document Deliveries',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.indigo[200]!),
+                      ),
+                      child: Text(
+                        '$total total deliver${total == 1 ? 'y' : 'ies'}',
+                        style: TextStyle(
+                            color: Colors.indigo[800],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppConstants.defaultPadding),
+
+                // ── Status chips ──────────────────────────────────────
+                Wrap(
+                  spacing: AppConstants.smallPadding,
+                  runSpacing: AppConstants.smallPadding,
+                  children: byStatus.entries.map((e) {
+                    final color =
+                        statusColors[e.key] ?? const Color(0xFF9E9E9E);
+                    final label = e.key.replaceAll('_', ' ');
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: color.withOpacity(0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                              radius: 5, backgroundColor: color),
+                          const SizedBox(width: 8),
+                          Text(
+                            label[0].toUpperCase() + label.substring(1),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: color,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            e.value.toString(),
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: color),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                if (total > 0) ...[
+                  const SizedBox(height: AppConstants.smallPadding),
+                  // Revenue row
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.payments,
+                            size: 16, color: Colors.green[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Total Revenue (Paid): ₱${NumberFormat('#,##0.00').format(totalRevenue)}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[800]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  const Divider(),
+                  const SizedBox(height: AppConstants.smallPadding),
+
+                  // ── Deliveries table (latest 10) ──────────────────
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowHeight: 36,
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 44,
+                      columnSpacing: 16,
+                      columns: const [
+                        DataColumn(
+                            label: Text('Sender',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Receiver',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Doc Type',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Delivery Status',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Payment',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Amount',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            numeric: true),
+                      ],
+                      rows: deliveries.take(10).map((d) {
+                        final sc =
+                            statusColors[d.deliveryStatus] ??
+                                const Color(0xFF9E9E9E);
+                        final fmt = NumberFormat.currency(
+                            symbol: '₱', decimalDigits: 2);
+                        return DataRow(cells: [
+                          DataCell(Text(
+                              d.senderName.isNotEmpty
+                                  ? d.senderName
+                                  : '—',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600))),
+                          DataCell(Text(d.receiverName.isNotEmpty
+                              ? d.receiverName
+                              : '—')),
+                          DataCell(Text(d.documentType.isNotEmpty
+                              ? d.documentType
+                              : '—')),
+                          DataCell(Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: sc.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              d.deliveryStatus
+                                  .replaceAll('_', ' ')
+                                  .split(' ')
+                                  .map((w) =>
+                                      w[0].toUpperCase() + w.substring(1))
+                                  .join(' '),
+                              style: TextStyle(
+                                  color: sc,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11),
+                            ),
+                          )),
+                          DataCell(Text(
+                            d.paymentStatus.toUpperCase(),
+                            style: TextStyle(
+                              color: d.paymentStatus == 'paid'
+                                  ? Colors.green[700]
+                                  : Colors.orange[700],
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
+                          )),
+                          DataCell(Text(fmt.format(d.paymentAmount))),
                         ]);
                       }).toList(),
                     ),
@@ -2176,20 +2660,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
   pw.Widget _buildTableHeader(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
+      padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
       ),
     );
   }
 
   pw.Widget _buildTableCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
+      padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
         text,
-        style: const pw.TextStyle(fontSize: 9),
+        style: const pw.TextStyle(fontSize: 8),
+        softWrap: true,
+        overflow: pw.TextOverflow.span,
       ),
     );
   }
@@ -2238,6 +2724,33 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       final rentalListings =
           Provider.of<RentalVanListingProvider>(context, listen: false)
               .listings;
+
+      // Fetch van rental requests
+      final rentalRequests =
+          Provider.of<VanRentalRequestProvider>(context, listen: false).requests;
+      final rentalReqByStatus = <String, int>{
+        'pending': rentalRequests.where((r) => r.status == 'pending').length,
+        'approved': rentalRequests.where((r) => r.status == 'approved').length,
+        'rejected': rentalRequests.where((r) => r.status == 'rejected').length,
+        'cancelled': rentalRequests.where((r) => r.status == 'cancelled').length,
+        'completed': rentalRequests.where((r) => r.status == 'completed').length,
+      };
+      final rentalReqPaidRevenue = rentalRequests
+          .where((r) => r.paymentStatus == 'paid')
+          .fold<double>(0, (s, r) => s + r.totalAmount);
+
+      // Fetch document deliveries
+      final deliveries = await _deliveryService.getDeliveriesStream().first;
+      final deliveryByStatus = <String, int>{
+        'pending': deliveries.where((d) => d.deliveryStatus == 'pending').length,
+        'picked_up': deliveries.where((d) => d.deliveryStatus == 'picked_up').length,
+        'in_transit': deliveries.where((d) => d.deliveryStatus == 'in_transit').length,
+        'delivered': deliveries.where((d) => d.deliveryStatus == 'delivered').length,
+        'cancelled': deliveries.where((d) => d.deliveryStatus == 'cancelled').length,
+      };
+      final deliveryRevenue = deliveries
+          .where((d) => d.paymentStatus == 'paid')
+          .fold<double>(0, (s, d) => s + d.paymentAmount);
 
       pdf.addPage(
         pw.MultiPage(
@@ -2574,6 +3087,191 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                   ),
                 ];
               }(),
+
+              // Van Rental Requests Section
+              pw.SizedBox(height: 24),
+              pw.Text(
+                'Van Rental Requests',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Total: ${rentalRequests.length}  |  '
+                      'Pending: ${rentalReqByStatus['pending'] ?? 0}  |  '
+                      'Approved: ${rentalReqByStatus['approved'] ?? 0}  |  '
+                      'Completed: ${rentalReqByStatus['completed'] ?? 0}  |  '
+                      'Paid Revenue: PHP ${rentalReqPaidRevenue.toStringAsFixed(2)}',
+                      style: pw.TextStyle(
+                          fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: rentalReqByStatus.entries.map((e) {
+                        return pw.Column(children: [
+                          pw.Text(
+                            e.value.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 14, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            e.key[0].toUpperCase() + e.key.substring(1),
+                            style: const pw.TextStyle(
+                                fontSize: 8, color: PdfColors.grey700),
+                          ),
+                        ]);
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              if (rentalRequests.isNotEmpty)
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(2),
+                    1: pw.FlexColumnWidth(2),
+                    2: pw.FlexColumnWidth(2),
+                    3: pw.FlexColumnWidth(1.5),
+                    4: pw.FlexColumnWidth(1.5),
+                    5: pw.FlexColumnWidth(1),
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableHeader('Brand / Model'),
+                        _buildTableHeader('Pickup Location'),
+                        _buildTableHeader('Dates'),
+                        _buildTableHeader('Total'),
+                        _buildTableHeader('Status'),
+                        _buildTableHeader('Payment'),
+                      ],
+                    ),
+                    ...rentalRequests.take(20).map(
+                          (r) => pw.TableRow(children: [
+                            _buildTableCell(
+                                r.brand.isNotEmpty ? r.brand : '—'),
+                            _buildTableCell(r.pickupLocation.isNotEmpty
+                                ? r.pickupLocation
+                                : '—'),
+                            _buildTableCell(
+                                '${DateFormat('MMM dd').format(r.rentalStartDate)} - ${DateFormat('MMM dd').format(r.rentalEndDate)}'),
+                            _buildTableCell(
+                                'PHP ${r.totalAmount.toStringAsFixed(2)}'),
+                            _buildTableCell(r.status[0].toUpperCase() +
+                                r.status.substring(1)),
+                            _buildTableCell(r.paymentStatus.toUpperCase()),
+                          ]),
+                        ),
+                  ],
+                ),
+
+              // Document Deliveries Section
+              pw.SizedBox(height: 24),
+              pw.Text(
+                'Document Deliveries',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.indigo50,
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Total: ${deliveries.length}  |  '
+                      'Delivered: ${deliveryByStatus['delivered'] ?? 0}  |  '
+                      'In Transit: ${deliveryByStatus['in_transit'] ?? 0}  |  '
+                      'Pending: ${deliveryByStatus['pending'] ?? 0}  |  '
+                      'Revenue: PHP ${deliveryRevenue.toStringAsFixed(2)}',
+                      style: pw.TextStyle(
+                          fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: deliveryByStatus.entries.map((e) {
+                        return pw.Column(children: [
+                          pw.Text(
+                            e.value.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 14,
+                                fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            e.key.replaceAll('_', ' '),
+                            style: const pw.TextStyle(
+                                fontSize: 8, color: PdfColors.grey700),
+                          ),
+                        ]);
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              if (deliveries.isNotEmpty)
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(2),
+                    1: const pw.FlexColumnWidth(2),
+                    2: const pw.FlexColumnWidth(1.5),
+                    3: const pw.FlexColumnWidth(1.5),
+                    4: const pw.FlexColumnWidth(1),
+                    5: const pw.FlexColumnWidth(1.5),
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _buildTableHeader('Sender'),
+                        _buildTableHeader('Receiver'),
+                        _buildTableHeader('Doc Type'),
+                        _buildTableHeader('Del. Status'),
+                        _buildTableHeader('Payment'),
+                        _buildTableHeader('Amount'),
+                      ],
+                    ),
+                    ...deliveries.take(20).map(
+                          (d) => pw.TableRow(children: [
+                            _buildTableCell(d.senderName.isNotEmpty
+                                ? d.senderName
+                                : '—'),
+                            _buildTableCell(d.receiverName.isNotEmpty
+                                ? d.receiverName
+                                : '—'),
+                            _buildTableCell(d.documentType.isNotEmpty
+                                ? d.documentType
+                                : '—'),
+                            _buildTableCell(
+                                d.deliveryStatus.replaceAll('_', ' ')),
+                            _buildTableCell(d.paymentStatus),
+                            _buildTableCell(
+                                'PHP ${d.paymentAmount.toStringAsFixed(2)}'),
+                          ]),
+                        ),
+                  ],
+                ),
 
               // Trip History Section
               pw.SizedBox(height: 24),

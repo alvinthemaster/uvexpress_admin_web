@@ -29,6 +29,7 @@ class AppConstants {
   static const String vanRentalsRoute = '/van-rentals';
   static const String documentDeliveriesRoute = '/document-deliveries';
   static const String analyticsRoute = '/analytics';
+  static const String usersRoute = '/users';
   static const String settingsRoute = '/settings';
 
   // Firebase Collections
@@ -193,6 +194,8 @@ class AppStrings {
   static const String vanRentalManagement = 'Van Rental Management';
   static const String documentDeliveries = 'Document Deliveries';
   static const String documentDeliveryManagement = 'Document Delivery Management';
+  static const String users = 'Users';
+  static const String userManagement = 'User Management';
 
   // Van Management
   static const String vanManagement = 'Van Management';

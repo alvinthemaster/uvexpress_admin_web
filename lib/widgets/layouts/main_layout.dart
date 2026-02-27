@@ -237,6 +237,12 @@ class _MainLayoutState extends State<MainLayout> {
                   route: AppConstants.analyticsRoute,
                   isSelected: currentRoute == AppConstants.analyticsRoute,
                 ),
+                _buildNavItem(
+                  icon: Icons.manage_accounts,
+                  label: AppStrings.userManagement,
+                  route: AppConstants.usersRoute,
+                  isSelected: currentRoute == AppConstants.usersRoute,
+                ),
                 const SizedBox(height: AppConstants.defaultPadding),
                 if (_isDrawerOpen)
                   Padding(
@@ -568,6 +574,8 @@ class _MainLayoutState extends State<MainLayout> {
         return AppStrings.documentDeliveryManagement;
       case AppConstants.analyticsRoute:
         return AppStrings.analytics;
+      case AppConstants.usersRoute:
+        return AppStrings.userManagement;
       case AppConstants.settingsRoute:
         return AppStrings.settings;
       default:

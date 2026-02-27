@@ -402,9 +402,9 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
                   '${AppConstants.currencySymbol}${delivery.paymentAmount.toStringAsFixed(2)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                if (delivery.paymentAmount != delivery.deliveryFee)
+                if (delivery.paymentAmount != delivery.bookingFee)
                   Text(
-                    'Fee: ${AppConstants.currencySymbol}${delivery.deliveryFee.toStringAsFixed(2)}',
+                    'Fee: ${AppConstants.currencySymbol}${delivery.bookingFee.toStringAsFixed(2)}',
                     style:
                         TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
@@ -434,6 +434,32 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
                   icon: const Icon(Icons.visibility),
                   tooltip: 'View Details',
                 ),
+                if (delivery.paymentStatus == 'unpaid' ||
+                    delivery.paymentStatus == 'pending')
+                  Tooltip(
+                    message: 'Mark as Paid',
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        try {
+                          await _service.updatePaymentStatus(
+                              delivery.id, 'paid');
+                          _showSnack('Payment marked as Paid');
+                        } catch (e) {
+                          _showSnack('Error: $e', isError: true);
+                        }
+                      },
+                      icon: const Icon(Icons.payment, size: 15),
+                      label: const Text('Paid',
+                          style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.green[700],
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
                 PopupMenuButton<String>(
                   onSelected: (value) =>
                       _handleDeliveryAction(value, delivery),
@@ -625,7 +651,7 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
                 ]),
                 _buildDetailSection('Payment Information', [
                   'Method: ${delivery.paymentMethod}',
-                  'Delivery Fee: ${AppConstants.currencySymbol}${delivery.deliveryFee.toStringAsFixed(2)}',
+                  'Delivery Fee: ${AppConstants.currencySymbol}${delivery.bookingFee.toStringAsFixed(2)}',
                   'Total: ${AppConstants.currencySymbol}${delivery.paymentAmount.toStringAsFixed(2)}',
                   'Payment Status: ${_formatStatus(delivery.paymentStatus)}',
                 ]),
