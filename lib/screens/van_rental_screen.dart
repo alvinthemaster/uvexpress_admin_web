@@ -199,7 +199,7 @@ class _RentalListingsTabState extends State<_RentalListingsTab> {
         ElevatedButton.icon(
           onPressed: () => _openForm(context),
           icon: const Icon(Icons.add),
-          label: const Text('Add Rental Van'),
+          label: const Text('Add Rental'),
         ),
       ],
     );
@@ -620,6 +620,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
   bool _isAvailable = true;
   DateTime? _availFrom;
   DateTime? _availTo;
+  String _vehicleType = 'van';
 
   @override
   void initState() {
@@ -640,6 +641,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
       _isAvailable = e.isAvailable;
       _availFrom = e.availableFrom;
       _availTo = e.availableTo;
+      _vehicleType = e.vehicleType;
     }
   }
 
@@ -704,6 +706,8 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
                   children: [
                     _sec('Van Details'),
                     _buildVanSelector(context),
+                    const SizedBox(height: AppConstants.smallPadding),
+                    _buildVehicleTypeSelector(),
                     const SizedBox(height: AppConstants.smallPadding),
                     _tf(
                       _plateCtrl,
@@ -925,7 +929,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
                               color: Colors.white))
                       : const Icon(Icons.save),
                   label: Text(
-                      isEdit ? 'Update Listing' : 'Add to Rental'),
+                      isEdit ? 'Update Listing' : 'Add Rental'),
                 ),
               ],
             ),
@@ -961,10 +965,35 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
             if (v != null) {
               _plateCtrl.text = v.plateNumber;
               if (_brandCtrl.text.isEmpty) _brandCtrl.text = v.vehicleType;
+              _vehicleType = v.vehicleType;
             }
           }),
         );
       },
+    );
+  }
+
+  Widget _buildVehicleTypeSelector() {
+    return DropdownButtonFormField<String>(
+      value: _vehicleType,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Vehicle Type *',
+        prefixIcon: Icon(Icons.directions_bus),
+      ),
+      items: const [
+        DropdownMenuItem(
+          value: 'van',
+          child: Text('Van'),
+        ),
+        DropdownMenuItem(
+          value: 'bus',
+          child: Text('Bus'),
+        ),
+      ],
+      onChanged: (v) => setState(() {
+        _vehicleType = v ?? 'van';
+      }),
     );
   }
 
@@ -1054,7 +1083,7 @@ class _ListingFormDialogState extends State<_ListingFormDialog> {
       plateNumber: _plateCtrl.text.trim().toUpperCase().isNotEmpty
           ? _plateCtrl.text.trim().toUpperCase()
           : van?.plateNumber ?? e?.plateNumber ?? '',
-      vehicleType: van?.vehicleType ?? e?.vehicleType ?? 'van',
+      vehicleType: _vehicleType,
       capacity: van?.capacity ?? e?.capacity ?? 0,
       brand: _brandCtrl.text.trim(),
       color: _colorCtrl.text.trim(),
