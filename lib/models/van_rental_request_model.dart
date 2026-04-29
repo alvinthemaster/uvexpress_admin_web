@@ -21,6 +21,7 @@ class VanRentalRequest {
   final DateTime? completedAt;
   final DateTime? cancelledAt;
   final String? cancellationReason;
+  final bool withDriver;
 
   const VanRentalRequest({
     required this.id,
@@ -41,6 +42,7 @@ class VanRentalRequest {
     this.completedAt,
     this.cancelledAt,
     this.cancellationReason,
+    this.withDriver = false,
   });
 
   factory VanRentalRequest.fromFirestore(DocumentSnapshot doc) {
@@ -67,6 +69,7 @@ class VanRentalRequest {
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
       cancellationReason: data['cancellationReason'] as String?,
+      withDriver: (data['withDriver'] ?? false) == true,
     );
   }
 

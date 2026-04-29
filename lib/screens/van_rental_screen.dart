@@ -1588,6 +1588,13 @@ class _RequestCardState extends State<_RequestCard> {
                 _dtRow(context, 'Pickup', liveReq.pickupLocation),
                 _dtRow(context, 'Name', liveReq.dropoffLocation),
                 _dtRow(context, 'Purpose', liveReq.purpose),
+                _dtRow(
+                  context,
+                  'Driver Option',
+                  liveReq.withDriver
+                      ? 'With Driver (+₱1,000)'
+                      : 'Self-Drive',
+                ),
                 if (liveReq.specialRequirements.isNotEmpty)
                   _dtRow(context, 'Special Req.',
                       liveReq.specialRequirements),
