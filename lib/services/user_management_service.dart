@@ -54,6 +54,8 @@ class UserManagementService {
         password: password,
       );
       final uid = credential.user!.uid;
+      // Send email verification before signing out so the link is valid
+      await credential.user!.sendEmailVerification();
       await secondaryAuth.signOut();
 
       final user = AppUser(

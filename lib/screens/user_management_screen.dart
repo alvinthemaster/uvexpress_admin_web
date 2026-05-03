@@ -631,7 +631,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_isEditing
               ? 'User updated successfully.'
-              : 'User created successfully.'),
+              : 'User created successfully. A verification email has been sent to ${_emailCtrl.text.trim()}.'),
           backgroundColor: Colors.green[700],
           behavior: SnackBarBehavior.floating,
         ));

@@ -1959,12 +1959,6 @@ class _Base64FileRowState extends State<_Base64FileRow> {
                                 setState(() => _expanded = !_expanded),
                           ),
                         if (isPdf)
-                          _ActionChip(
-                            icon: Icons.picture_as_pdf_outlined,
-                            label: 'Open PDF',
-                            color: Colors.red[700]!,
-                            onTap: _openInNewTab,
-                          ),
                         _ActionChip(
                           icon: Icons.download_outlined,
                           label: 'Download',

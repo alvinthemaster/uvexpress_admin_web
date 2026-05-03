@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/van_provider.dart';
+import '../providers/user_management_provider.dart';
 import '../models/van_model.dart';
+import '../models/app_user_model.dart';
 import '../models/route_model.dart' as route_model;
 import '../services/van_service.dart';
 import '../services/route_service.dart';
@@ -511,10 +513,13 @@ class _VanManagementScreenState extends State<VanManagementScreen>
         .map((r) => r.id)
         .toSet();
 
+    final day = _selectedDay;
     return allVans
         .where((v) =>
             v.currentRouteId != null &&
-            matchingRouteIds.contains(v.currentRouteId))
+            matchingRouteIds.contains(v.currentRouteId) &&
+            // Empty weeklySchedule means the vehicle operates all days
+            (v.weeklySchedule.isEmpty || v.weeklySchedule.contains(day)))
         .toList()
       ..sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
   }
@@ -671,7 +676,7 @@ class _VanManagementScreenState extends State<VanManagementScreen>
                 size: 36, color: Colors.grey[400]),
             const SizedBox(height: 8),
             Text(
-              'No vehicles assigned to $routeLabel',
+              'No vehicles scheduled for ${_selectedDay[0].toUpperCase()}${_selectedDay.substring(1)} on $routeLabel',
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
           ],
@@ -2178,8 +2183,10 @@ class _AddVanDialogState extends State<AddVanDialog> {
   final _formKey = GlobalKey<FormState>();
   final _plateNumberController = TextEditingController();
   late TextEditingController _capacityController;
-  final _driverNameController = TextEditingController();
   final _driverContactController = TextEditingController();
+
+  AppUser? _selectedDriver;
+  List<AppUser> _driverUsers = [];
 
   String _selectedStatus = 'in_queue'; // Default to in queue status
   String? _selectedRouteId; // Route selection
@@ -2204,6 +2211,33 @@ class _AddVanDialogState extends State<AddVanDialog> {
     final defaultCapacity = widget.vehicleType == 'bus' ? '22' : '18';
     _capacityController = TextEditingController(text: defaultCapacity);
     _loadRoutes();
+    _loadDriverUsers();
+  }
+
+  void _loadDriverUsers() {
+    final provider = Provider.of<UserManagementProvider>(context, listen: false);
+    if (provider.users.isEmpty) {
+      provider.startListening();
+    }
+    setState(() {
+      _driverUsers = provider.users.where((u) => u.role == 'driver').toList();
+    });
+    // Update driver list when provider updates
+    provider.addListener(_onUsersUpdated);
+  }
+
+  void _onUsersUpdated() {
+    final provider = Provider.of<UserManagementProvider>(context, listen: false);
+    if (mounted) {
+      setState(() {
+        _driverUsers = provider.users.where((u) => u.role == 'driver').toList();
+        // Keep selected driver in sync
+        if (_selectedDriver != null) {
+          final updated = _driverUsers.where((u) => u.id == _selectedDriver!.id).firstOrNull;
+          if (updated != null) _selectedDriver = updated;
+        }
+      });
+    }
   }
 
   Future<void> _loadRoutes() async {
@@ -2224,9 +2258,10 @@ class _AddVanDialogState extends State<AddVanDialog> {
 
   @override
   void dispose() {
+    Provider.of<UserManagementProvider>(context, listen: false)
+        .removeListener(_onUsersUpdated);
     _plateNumberController.dispose();
     _capacityController.dispose();
-    _driverNameController.dispose();
     _driverContactController.dispose();
     super.dispose();
   }
@@ -2353,45 +2388,55 @@ class _AddVanDialogState extends State<AddVanDialog> {
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
 
-                      // Driver Name
-                      TextFormField(
-                        controller: _driverNameController,
+                      // Driver Name Dropdown
+                      DropdownButtonFormField<String?>(
+                        value: _selectedDriver?.id,
                         decoration: const InputDecoration(
                           labelText: 'Driver Name *',
-                          hintText: 'Enter driver full name',
+                          hintText: 'Select a driver',
                           prefixIcon: Icon(Icons.person),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Driver name is required';
-                          }
-                          if (value.trim().length < 2) {
-                            return 'Driver name must be at least 2 characters';
+                        items: [
+                          if (_driverUsers.isEmpty)
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('No drivers available'),
+                            )
+                          else
+                            ..._driverUsers.map(
+                              (driver) => DropdownMenuItem<String?>(
+                                value: driver.id,
+                                child: Text(driver.name),
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedDriver = _driverUsers
+                                .where((u) => u.id == value)
+                                .firstOrNull;
+                            _driverContactController.text =
+                                _selectedDriver?.phone ?? '';
+                          });
+                        },
+                        validator: (_) {
+                          if (_selectedDriver == null) {
+                            return 'Please select a driver';
                           }
                           return null;
                         },
-                        textCapitalization: TextCapitalization.words,
                       ),
                       const SizedBox(height: AppConstants.defaultPadding),
 
-                      // Driver Contact
+                      // Driver Contact (auto-populated, read-only)
                       TextFormField(
                         controller: _driverContactController,
+                        readOnly: true,
                         decoration: const InputDecoration(
-                          labelText: 'Driver Contact Number *',
-                          hintText: 'Enter driver phone number',
+                          labelText: 'Driver Contact Number',
+                          hintText: 'Auto-filled from driver account',
                           prefixIcon: Icon(Icons.phone),
                         ),
-                        keyboardType: TextInputType.phone,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Driver contact is required';
-                          }
-                          if (value.trim().length < 10) {
-                            return 'Contact number must be at least 10 digits';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: AppConstants.largePadding),
 
@@ -2666,12 +2711,12 @@ class _AddVanDialogState extends State<AddVanDialog> {
     try {
       final vanProvider = Provider.of<VanProvider>(context, listen: false);
 
-      // Create driver object
+      // Create driver object using the selected driver account
       final driver = Driver(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _driverNameController.text.trim(),
+        id: _selectedDriver!.id,
+        name: _selectedDriver!.name,
         license: 'N/A', // Not collecting license anymore
-        contact: _driverContactController.text.trim(),
+        contact: _selectedDriver!.phone,
       );
 
       // Create van object
