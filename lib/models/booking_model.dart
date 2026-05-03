@@ -63,6 +63,11 @@ class Booking {
   final DateTime? completedAt;
   final String? completionReason;
   final bool? adminCompletion;
+  // Add-on / passenger details
+  final int childCount;
+  final int petCount;
+  final int baggageCount;
+  final double baggageFee;
 
   Booking({
     required this.id,
@@ -96,6 +101,10 @@ class Booking {
     this.completedAt,
     this.completionReason,
     this.adminCompletion,
+    this.childCount = 0,
+    this.petCount = 0,
+    this.baggageCount = 0,
+    this.baggageFee = 0.0,
   });
 
   factory Booking.fromFirestore(DocumentSnapshot doc) {
@@ -135,6 +144,10 @@ class Booking {
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       completionReason: data['completionReason'],
       adminCompletion: data['adminCompletion'],
+      childCount: (data['childCount'] ?? data['children'] ?? 0) as int,
+      petCount: (data['petCount'] ?? data['pets'] ?? 0) as int,
+      baggageCount: (data['baggageCount'] ?? data['baggage'] ?? 0) as int,
+      baggageFee: ((data['baggageFee'] ?? data['baggageAddOn'] ?? data['addOnBaggageFee'] ?? 0)).toDouble(),
     );
   }
 
@@ -172,8 +185,11 @@ class Booking {
       // Completion fields
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'completionReason': completionReason,
-      'adminCompletion': adminCompletion,
-    };
+      'adminCompletion': adminCompletion,      // Add-on / passenger details
+      'childCount': childCount,
+      'petCount': petCount,
+      'baggageCount': baggageCount,
+      'baggageFee': baggageFee,    };
   }
 
   Booking copyWith({
@@ -208,6 +224,10 @@ class Booking {
     DateTime? completedAt,
     String? completionReason,
     bool? adminCompletion,
+    int? childCount,
+    int? petCount,
+    int? baggageCount,
+    double? baggageFee,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -241,6 +261,10 @@ class Booking {
       completedAt: completedAt ?? this.completedAt,
       completionReason: completionReason ?? this.completionReason,
       adminCompletion: adminCompletion ?? this.adminCompletion,
+      childCount: childCount ?? this.childCount,
+      petCount: petCount ?? this.petCount,
+      baggageCount: baggageCount ?? this.baggageCount,
+      baggageFee: baggageFee ?? this.baggageFee,
     );
   }
 }

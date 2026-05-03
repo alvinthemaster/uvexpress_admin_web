@@ -704,6 +704,10 @@ class _BookingDetailsDialogState extends State<_BookingDetailsDialog> {
                 'Name: ${widget.booking!.userName}',
                 'Email: ${widget.booking!.userEmail}',
                 'Phone: ${widget.booking!.passengerDetails.phone}',
+                if (widget.booking!.childCount > 0)
+                  'Children: ${widget.booking!.childCount}',
+                if (widget.booking!.petCount > 0)
+                  'Pets: ${widget.booking!.petCount}',
               ]),
               _buildDetailSection('Trip Information', [
                 'Route: ${widget.booking!.routeName}',
@@ -716,6 +720,8 @@ class _BookingDetailsDialogState extends State<_BookingDetailsDialog> {
               _buildDetailSection('Payment Information', [
                 'Base Price: ₱${widget.booking!.basePrice.toStringAsFixed(2)}',
                 'Discount: ₱${widget.booking!.discountAmount.toStringAsFixed(2)}',
+                if (widget.booking!.baggageFee > 0)
+                  'Baggage Add-on (${widget.booking!.baggageCount} bag${widget.booking!.baggageCount == 1 ? '' : 's'}): ₱${widget.booking!.baggageFee.toStringAsFixed(2)}',
                 'Total: ₱${widget.booking!.totalAmount.toStringAsFixed(2)}',
                 'Method: ${widget.booking!.paymentMethod}',
                 'Status: ${widget.booking!.paymentStatus}',
