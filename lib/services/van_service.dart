@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/van_model.dart';
+import 'route_service.dart';
 
 class VanService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -524,9 +526,69 @@ class VanService {
       await _checkAndUpdateVanStatus(vanId);
 
       print('✅ Trip completion finished for van ${van.plateNumber} - all seats available, status="in_queue", queue position unchanged');
+
+      // Step 6: Auto-reassign to opposite route (Glan↔Gensan loop)
+      await autoReassignVanToOppositeRoute(vanId);
     } catch (e) {
       print('❌ Error completing van trip: $e');
       rethrow;
+    }
+  }
+
+  // Auto-reassign a van to the opposite route after trip completion (Glan↔Gensan loop)
+  Future<void> autoReassignVanToOppositeRoute(String vanId) async {
+    try {
+      Van? van = await getVanById(vanId);
+      if (van == null) {
+        print('⚠️ Auto-reassign: Van $vanId not found');
+        return;
+      }
+
+      if (van.currentRouteId == null || van.currentRouteId!.isEmpty) {
+        print('⚠️ Auto-reassign: Van ${van.plateNumber} has no route assigned – skipping');
+        return;
+      }
+
+      final routeService = RouteService();
+      final currentRoute = await routeService.getRouteById(van.currentRouteId!);
+      if (currentRoute == null) {
+        print('⚠️ Auto-reassign: Route ${van.currentRouteId} not found – skipping');
+        return;
+      }
+
+      // Determine origin/destination of the opposite route (swap them)
+      final oppositeRoute = await routeService.getRouteByOriginAndDestination(
+        currentRoute.destination,
+        currentRoute.origin,
+      );
+
+      if (oppositeRoute == null) {
+        print('⚠️ Auto-reassign: No opposite route found for '
+            '${currentRoute.origin} → ${currentRoute.destination} – skipping');
+        return;
+      }
+
+      // Calculate next queue position at the END of the destination route's queue
+      final vansOnOppositeRoute = await getVansByRoute(oppositeRoute.id);
+      final maxPosition = vansOnOppositeRoute.isEmpty
+          ? 0
+          : vansOnOppositeRoute.map((v) => v.queuePosition).reduce(max);
+      final newPosition = maxPosition + 1;
+
+      // Update van: new route, queue position at end, keep status 'in_queue'
+      await _firestore.collection(_collection).doc(vanId).update({
+        'currentRouteId': oppositeRoute.id,
+        'queuePosition': newPosition,
+        'routeAssignedAt': FieldValue.serverTimestamp(),
+      });
+
+      print('🔄 Auto-reassigned van ${van.plateNumber}: '
+          '${currentRoute.origin}→${currentRoute.destination} '
+          '→ ${oppositeRoute.origin}→${oppositeRoute.destination} '
+          '(queue position: $newPosition)');
+    } catch (e) {
+      print('❌ Error in auto-reassignment: $e');
+      // Do NOT rethrow – auto-reassignment failure should not break trip completion
     }
   }
 

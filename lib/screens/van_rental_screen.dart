@@ -1,3 +1,6 @@
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -1598,6 +1601,27 @@ class _RequestCardState extends State<_RequestCard> {
                 if (liveReq.specialRequirements.isNotEmpty)
                   _dtRow(context, 'Special Req.',
                       liveReq.specialRequirements),
+                // ── Uploaded documents ──────────────────────────────
+                if (liveReq.driverLicenseBase64 != null &&
+                    liveReq.driverLicenseBase64!.isNotEmpty) ...[
+                  const Divider(height: AppConstants.largePadding),
+                  _Base64FileRow(
+                    label: "Driver's License",
+                    fileName: liveReq.driverLicenseFileName ?? 'driver_license',
+                    base64Data: liveReq.driverLicenseBase64!,
+                  ),
+                ],
+                if (liveReq.proofOfPurposeBase64 != null &&
+                    liveReq.proofOfPurposeBase64!.isNotEmpty) ...[
+                  if (liveReq.driverLicenseBase64 == null ||
+                      liveReq.driverLicenseBase64!.isEmpty)
+                    const Divider(height: AppConstants.largePadding),
+                  _Base64FileRow(
+                    label: 'Proof of Purpose',
+                    fileName: liveReq.proofOfPurposeFileName ?? 'proof_of_purpose',
+                    base64Data: liveReq.proofOfPurposeBase64!,
+                  ),
+                ],
                 const Divider(height: AppConstants.largePadding),
                 _dtRow(context, 'Start Date',
                     df.format(liveReq.rentalStartDate)),
@@ -1606,8 +1630,15 @@ class _RequestCardState extends State<_RequestCard> {
                 _dtRow(context, 'Duration', '${liveReq.totalDays} day(s)'),
                 _dtRow(context, 'Price / Day',
                     fmt.format(liveReq.pricePerDay)),
-                _dtRow(context, 'Total', fmt.format(liveReq.totalAmount),
-                    highlight: true),
+                if ((liveReq.depositAmount ?? 0) > 0)
+                  _dtRow(context, 'Deposit',
+                      fmt.format(liveReq.depositAmount!)),
+                _dtRow(
+                  context,
+                  'Total',
+                  fmt.format(liveReq.totalAmount + (liveReq.depositAmount ?? 0.0)),
+                  highlight: true,
+                ),
                 const Divider(height: AppConstants.largePadding),
                 _dtRow(context, 'Submitted On', dtf.format(liveReq.createdAt)),
                 if (liveReq.confirmedAt != null)
@@ -1812,5 +1843,190 @@ class _RequestCardState extends State<_RequestCard> {
               fontWeight: FontWeight.w600)),
     );
   }
+}
 
+// ── File / Image row widget ───────────────────────────────────────────────────
+
+/// Resolves a Firebase Storage path/file-name OR a full HTTPS URL to a
+/// signed download URL, then shows either an expandable image or a download
+/// button depending on the file type.
+class _Base64FileRow extends StatefulWidget {
+  final String label;
+  final String fileName;
+  final String base64Data;
+
+  const _Base64FileRow({
+    required this.label,
+    required this.fileName,
+    required this.base64Data,
+  });
+
+  @override
+  State<_Base64FileRow> createState() => _Base64FileRowState();
+}
+
+class _Base64FileRowState extends State<_Base64FileRow> {
+  bool _expanded = false;
+
+  static bool _isImage(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.bmp');
+  }
+
+  static bool _isPdf(String fileName) =>
+      fileName.toLowerCase().endsWith('.pdf');
+
+  /// Determine MIME type from file extension.
+  static String _mimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.bmp')) return 'image/bmp';
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    return 'application/octet-stream';
+  }
+
+  /// Open the base64 data as a data-URL in a new browser tab.
+  void _openInNewTab() {
+    final mime = _mimeType(widget.fileName);
+    final dataUrl = 'data:$mime;base64,${widget.base64Data}';
+    html.AnchorElement(href: dataUrl)
+      ..setAttribute('target', '_blank')
+      ..setAttribute('rel', 'noopener noreferrer')
+      ..click();
+  }
+
+  /// Download the base64 data with the original filename.
+  void _download() {
+    final mime = _mimeType(widget.fileName);
+    final dataUrl = 'data:$mime;base64,${widget.base64Data}';
+    html.AnchorElement(href: dataUrl)
+      ..setAttribute('download', widget.fileName)
+      ..click();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isImage = _isImage(widget.fileName);
+    final isPdf = _isPdf(widget.fileName);
+
+    late final imageBytes = base64Decode(widget.base64Data);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 140,
+                child: Text(widget.label,
+                    style:
+                        TextStyle(color: Colors.grey[600], fontSize: 13)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.fileName,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        if (isImage)
+                          _ActionChip(
+                            icon: _expanded
+                                ? Icons.image
+                                : Icons.image_outlined,
+                            label: _expanded ? 'Hide' : 'View image',
+                            color: Theme.of(context).primaryColor,
+                            onTap: () =>
+                                setState(() => _expanded = !_expanded),
+                          ),
+                        if (isPdf)
+                          _ActionChip(
+                            icon: Icons.picture_as_pdf_outlined,
+                            label: 'Open PDF',
+                            color: Colors.red[700]!,
+                            onTap: _openInNewTab,
+                          ),
+                        _ActionChip(
+                          icon: Icons.download_outlined,
+                          label: 'Download',
+                          color: Colors.blueGrey[700]!,
+                          onTap: _download,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // ── Inline image preview ───────────────────────────
+          if (isImage && _expanded) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: Image.memory(
+                  imageBytes,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 12, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
 }

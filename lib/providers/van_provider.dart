@@ -238,6 +238,22 @@ class VanProvider with ChangeNotifier {
     }
   }
 
+  // Manually trigger auto-reassignment to opposite route
+  Future<void> autoReassignVan(String id) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _vanService.autoReassignVanToOppositeRoute(id);
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> progressAllQueues() async {
     try {
       _isLoading = true;

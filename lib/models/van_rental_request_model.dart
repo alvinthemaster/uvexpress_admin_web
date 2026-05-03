@@ -15,6 +15,7 @@ class VanRentalRequest {
   final String status; // pending | approved | rejected | cancelled | completed
   final String paymentStatus; // pending | paid
   final double totalAmount;
+  final double? depositAmount;
   final int totalDays;
   final DateTime createdAt;
   final DateTime? confirmedAt;
@@ -22,6 +23,10 @@ class VanRentalRequest {
   final DateTime? cancelledAt;
   final String? cancellationReason;
   final bool withDriver;
+  final String? driverLicenseFileName;
+  final String? driverLicenseBase64;
+  final String? proofOfPurposeFileName;
+  final String? proofOfPurposeBase64;
 
   const VanRentalRequest({
     required this.id,
@@ -36,6 +41,7 @@ class VanRentalRequest {
     required this.status,
     this.paymentStatus = 'pending',
     required this.totalAmount,
+    this.depositAmount,
     required this.totalDays,
     required this.createdAt,
     this.confirmedAt,
@@ -43,6 +49,10 @@ class VanRentalRequest {
     this.cancelledAt,
     this.cancellationReason,
     this.withDriver = false,
+    this.driverLicenseFileName,
+    this.driverLicenseBase64,
+    this.proofOfPurposeFileName,
+    this.proofOfPurposeBase64,
   });
 
   factory VanRentalRequest.fromFirestore(DocumentSnapshot doc) {
@@ -62,6 +72,9 @@ class VanRentalRequest {
       status: data['status'] as String? ?? 'pending',
       paymentStatus: data['paymentStatus'] as String? ?? 'pending',
       totalAmount: (data['totalAmount'] as num?)?.toDouble() ?? 0.0,
+      depositAmount: data['depositAmount'] != null
+          ? (data['depositAmount'] as num).toDouble()
+          : null,
       totalDays: (data['totalDays'] as num?)?.toInt() ?? 0,
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -70,6 +83,10 @@ class VanRentalRequest {
       cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
       cancellationReason: data['cancellationReason'] as String?,
       withDriver: (data['withDriver'] ?? false) == true,
+      driverLicenseFileName: data['driverLicenseFileName'] as String?,
+      driverLicenseBase64: data['driverLicenseBase64'] as String?,
+      proofOfPurposeFileName: data['proofOfPurposeFileName'] as String?,
+      proofOfPurposeBase64: data['proofOfPurposeBase64'] as String?,
     );
   }
 

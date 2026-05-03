@@ -112,4 +112,27 @@ class RouteService {
                     .contains(location.toLowerCase()))
             .toList());
   }
+
+  // Find a route by matching origin and destination (case-insensitive)
+  Future<Route?> getRouteByOriginAndDestination(
+      String origin, String destination) async {
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      for (final doc in snapshot.docs) {
+        final route = Route.fromFirestore(doc);
+        if (route.origin.toLowerCase().contains(origin.toLowerCase()) &&
+            route.destination.toLowerCase().contains(destination.toLowerCase())) {
+          return route;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting route by origin/destination: $e');
+      return null;
+    }
+  }
 }

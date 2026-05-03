@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/van_provider.dart';
@@ -15,12 +16,17 @@ class VanManagementScreen extends StatefulWidget {
   State<VanManagementScreen> createState() => _VanManagementScreenState();
 }
 
-class _VanManagementScreenState extends State<VanManagementScreen> 
-    with SingleTickerProviderStateMixin {
+class _VanManagementScreenState extends State<VanManagementScreen>
+    with TickerProviderStateMixin {
   String _searchQuery = '';
   String _statusFilter = 'all';
-  
+
   late TabController _tabController;
+  late TabController _routeTabController;
+
+  // Routes loaded from Firestore for route-queue tabs
+  Map<String, route_model.Route> _routesMap = {};
+  StreamSubscription<List<route_model.Route>>? _routesSubscription;
   
   // Days of the week for tabs
   static const List<Map<String, String>> _weekDays = [
@@ -52,12 +58,23 @@ class _VanManagementScreenState extends State<VanManagementScreen>
       initialIndex: _getCurrentDayIndex(),
     );
     _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _routeTabController = TabController(length: 2, vsync: this);
+    _routeTabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    // Subscribe to routes for the route-queue section
+    _routesSubscription =
+        RouteService().getActiveRoutesStream().listen((routes) {
       if (mounted) {
-        setState(() {}); // Rebuild when tab changes
+        setState(() {
+          _routesMap = {for (final r in routes) r.id: r};
+        });
       }
     });
     // Debug van data after a short delay to let providers initialize
-    Future.delayed(Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 2), () {
       _debugVanData();
     });
   }
@@ -65,6 +82,8 @@ class _VanManagementScreenState extends State<VanManagementScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _routeTabController.dispose();
+    _routesSubscription?.cancel();
     super.dispose();
   }
 
@@ -159,6 +178,9 @@ class _VanManagementScreenState extends State<VanManagementScreen>
                 Text('• Van occupancies will be reset to 0'),
                 Text('• Van statuses will be updated to "In Queue"'),
                 Text('• Booking history will be preserved'),
+                Text('• Each vehicle auto-reassigned to opposite route (Glan↔Gensan)',
+                    style: TextStyle(
+                        color: Colors.teal, fontWeight: FontWeight.w600)),
               ],
             ),
             actions: [
@@ -467,6 +489,8 @@ class _VanManagementScreenState extends State<VanManagementScreen>
             const SizedBox(height: AppConstants.defaultPadding),
             _buildFilters(),
             const SizedBox(height: AppConstants.defaultPadding),
+            _buildRouteQueueSection(),
+            const SizedBox(height: AppConstants.defaultPadding),
             Expanded(child: _buildVansList()),
           ],
         ),
@@ -474,10 +498,483 @@ class _VanManagementScreenState extends State<VanManagementScreen>
     );
   }
 
+  // ─── Route Queue Section ──────────────────────────────────────────────────
+
+  /// Returns all vans assigned to routes whose origin contains [origin] and
+  /// destination contains [dest] (case-insensitive), sorted by queuePosition.
+  List<Van> _getVansForDirection(
+      List<Van> allVans, String origin, String dest) {
+    final matchingRouteIds = _routesMap.values
+        .where((r) =>
+            r.origin.toLowerCase().contains(origin.toLowerCase()) &&
+            r.destination.toLowerCase().contains(dest.toLowerCase()))
+        .map((r) => r.id)
+        .toSet();
+
+    return allVans
+        .where((v) =>
+            v.currentRouteId != null &&
+            matchingRouteIds.contains(v.currentRouteId))
+        .toList()
+      ..sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
+  }
+
+  Widget _buildRouteQueueSection() {
+    return Consumer<VanProvider>(
+      builder: (context, vanProvider, _) {
+        final glanGensanVans =
+            _getVansForDirection(vanProvider.vans, 'glan', 'gensan');
+        final gensanGlanVans =
+            _getVansForDirection(vanProvider.vans, 'gensan', 'glan');
+
+        return Container(
+          height: 260,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius:
+                BorderRadius.circular(AppConstants.defaultBorderRadius),
+            border: Border.all(color: Colors.grey[300]!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppConstants.defaultPadding,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.route, color: Colors.teal[700], size: 20),
+                    const SizedBox(width: AppConstants.smallPadding),
+                    Text(
+                      'Route Queue',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal[900],
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.teal[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal[200]!),
+                      ),
+                      child: Text(
+                        'FIFO – Auto-Reassign on Trip Complete',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal[800],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // Route TabBar
+              TabBar(
+                controller: _routeTabController,
+                labelColor: Colors.teal[700],
+                unselectedLabelColor: Colors.grey[600],
+                indicatorColor: Colors.teal[700],
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                tabs: [
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.arrow_forward, size: 16),
+                        const SizedBox(width: 6),
+                        const Text('Glan → Gensan'),
+                        const SizedBox(width: 6),
+                        _buildQueueCountBadge(glanGensanVans.length,
+                            Colors.teal[700]!),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.arrow_back, size: 16),
+                        const SizedBox(width: 6),
+                        const Text('Gensan → Glan'),
+                        const SizedBox(width: 6),
+                        _buildQueueCountBadge(gensanGlanVans.length,
+                            Colors.indigo[600]!),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 1),
+              // TabBarView
+              Expanded(
+                child: TabBarView(
+                  controller: _routeTabController,
+                  children: [
+                    _buildRouteVanList(glanGensanVans, 'Glan → Gensan'),
+                    _buildRouteVanList(gensanGlanVans, 'Gensan → Glan'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQueueCountBadge(int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRouteVanList(List<Van> vans, String routeLabel) {
+    if (vans.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.directions_bus_outlined,
+                size: 36, color: Colors.grey[400]),
+            const SizedBox(height: 8),
+            Text(
+              'No vehicles assigned to $routeLabel',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppConstants.defaultPadding,
+        vertical: 6,
+      ),
+      itemCount: vans.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        return _buildRouteVanRow(vans[index], index + 1);
+      },
+    );
+  }
+
+  Widget _buildRouteVanRow(Van van, int queueNum) {
+    final statusColor = _getStatusColor(van.status);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          // Queue number bubble
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Colors.teal[700],
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$queueNum',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Vehicle type icon
+          Icon(
+            van.vehicleType == 'bus'
+                ? Icons.directions_bus
+                : Icons.local_shipping,
+            size: 18,
+            color: van.vehicleType == 'bus' ? Colors.green[700] : Colors.blue[700],
+          ),
+          const SizedBox(width: 8),
+          // Plate & driver
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  van.plateNumber,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                if (van.driver.name.isNotEmpty)
+                  Text(
+                    van.driver.name,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  ),
+              ],
+            ),
+          ),
+          // Status badge
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: statusColor.withOpacity(0.4)),
+            ),
+            child: Text(
+              AppHelpers.formatVanStatus(van.status),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+          // GO button — only visible when van is full
+          if (van.status == 'full') ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'All passengers onboard — start trip now',
+              child: ElevatedButton(
+                onPressed: () => _goNow(van),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[700],
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(44, 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'GO',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+          // Trip Complete button — only visible when van is in transit
+          if (van.status == 'in_transit' || van.status == 'in-transit') ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'Mark trip as completed',
+              child: ElevatedButton(
+                onPressed: () => _completeTrip(van),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(44, 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          // Manual re-assign button
+          Tooltip(
+            message: 'Manually reassign to opposite route',
+            child: IconButton(
+              icon: Icon(Icons.swap_horiz, size: 18, color: Colors.teal[600]),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              onPressed: () => _manuallyReassignVan(van),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Manually trigger opposite-route reassignment from the queue panel
+  Future<void> _manuallyReassignVan(Van van) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reassign to Opposite Route'),
+        content: Text(
+          'Move ${van.plateNumber} to the opposite route and place it at the end of that queue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+            child: const Text('Reassign',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      await vanProvider.autoReassignVan(van.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '${van.plateNumber} reassigned to opposite route successfully'),
+            backgroundColor: Colors.teal,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error reassigning van: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Bypass the 15-min buffer and immediately set a full van to On Trip
+  Future<void> _goNow(Van van) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Start Trip Now'),
+        content: Text(
+          'All passengers onboard ${van.plateNumber}? This will skip the buffer time and set the status to On Trip immediately.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+            child: const Text('GO', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      await vanProvider.updateVanStatus(van.id, 'in_transit');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${van.plateNumber} is now On Trip!'),
+            backgroundColor: Colors.green[700],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting trip: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Mark an in-transit van's trip as completed
+  Future<void> _completeTrip(Van van) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Complete Trip'),
+        content: Text(
+          'Mark trip for ${van.plateNumber} as completed? This will reset occupancy and return the van to the queue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700]),
+            child: const Text('Complete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final vanProvider = Provider.of<VanProvider>(context, listen: false);
+      await vanProvider.completeVanTrip(van.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${van.plateNumber} trip completed!'),
+            backgroundColor: Colors.blue[700],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing trip: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ─── Header / Filters / etc. ─────────────────────────────────────────────
+
   Widget _buildHeader() {
     return Row(
       children: [
-        
         Wrap(
           spacing: AppConstants.smallPadding,
           runSpacing: AppConstants.smallPadding,
@@ -1601,6 +2098,9 @@ class _VanManagementScreenState extends State<VanManagementScreen>
                     const Text('• Van occupancy will be reset to 0'),
                     const Text('• Van status will be updated to "In Queue"'),
                     const Text('• All seats will become available for new bookings'),
+                    const Text('• Vehicle auto-reassigned to opposite route (Glan↔Gensan)',
+                        style: TextStyle(
+                            color: Colors.teal, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
