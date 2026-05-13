@@ -1475,8 +1475,8 @@ class _RequestCardState extends State<_RequestCard> {
   }
 
   void _updateStatusDialog(BuildContext context) {
-    String? selected = request.status;
-    const statuses = ['pending', 'approved', 'rejected', 'completed', 'cancelled'];
+    const statuses = ['approved', 'rejected'];
+    String? selected = statuses.contains(request.status) ? request.status : null;
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
@@ -1511,17 +1511,10 @@ class _RequestCardState extends State<_RequestCard> {
                       final newStatus = selected!;
                       Navigator.pop(dialogCtx);
                       _doAction(() async {
-                        switch (newStatus) {
-                          case 'approved':
-                            return provider.approveRequest(request.id);
-                          case 'completed':
-                            return provider.completeRequest(request.id);
-                          case 'rejected':
-                          case 'cancelled':
-                            return provider.rejectRequest(request.id);
-                          default:
-                            return false;
+                        if (newStatus == 'approved') {
+                          return provider.approveRequest(request.id);
                         }
+                        return provider.rejectRequest(request.id);
                       }, 'Status updated to "$newStatus"');
                     },
               child: const Text('Update'),
@@ -1912,10 +1905,63 @@ class _Base64FileRowState extends State<_Base64FileRow> {
       ..click();
   }
 
+  void _showEnlargedImage(Uint8List imageBytes) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _download,
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('Download'),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: Container(
+                color: Colors.black,
+                child: InteractiveViewer(
+                  minScale: 0.6,
+                  maxScale: 6,
+                  child: Center(
+                    child: Image.memory(
+                      imageBytes,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isImage = _isImage(widget.fileName);
-    final isPdf = _isPdf(widget.fileName);
 
     late final imageBytes = base64Decode(widget.base64Data);
 
@@ -1958,7 +2004,13 @@ class _Base64FileRowState extends State<_Base64FileRow> {
                             onTap: () =>
                                 setState(() => _expanded = !_expanded),
                           ),
-                        if (isPdf)
+                        if (isImage)
+                          _ActionChip(
+                            icon: Icons.zoom_out_map,
+                            label: 'Enlarge',
+                            color: Colors.blueGrey[700]!,
+                            onTap: () => _showEnlargedImage(imageBytes),
+                          ),
                         _ActionChip(
                           icon: Icons.download_outlined,
                           label: 'Download',
