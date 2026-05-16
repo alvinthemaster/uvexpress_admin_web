@@ -1615,6 +1615,19 @@ class _RequestCardState extends State<_RequestCard> {
                     base64Data: liveReq.proofOfPurposeBase64!,
                   ),
                 ],
+                if (liveReq.proofOfPaymentBase64 != null &&
+                    liveReq.proofOfPaymentBase64!.isNotEmpty) ...[
+                  if ((liveReq.driverLicenseBase64 == null ||
+                          liveReq.driverLicenseBase64!.isEmpty) &&
+                      (liveReq.proofOfPurposeBase64 == null ||
+                          liveReq.proofOfPurposeBase64!.isEmpty))
+                    const Divider(height: AppConstants.largePadding),
+                  _Base64FileRow(
+                    label: 'Proof of Payment',
+                    fileName: liveReq.proofOfPaymentFileName ?? 'proof_of_payment',
+                    base64Data: liveReq.proofOfPaymentBase64!,
+                  ),
+                ],
                 const Divider(height: AppConstants.largePadding),
                 _dtRow(context, 'Start Date',
                     df.format(liveReq.rentalStartDate)),

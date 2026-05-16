@@ -26,6 +26,7 @@ class DocumentDelivery {
   final String? cancelledBy;
   final String? cancellationReason;
   final DateTime? cancelledAt;
+  final String? proofOfPaymentBase64;
 
   DocumentDelivery({
     required this.id,
@@ -53,6 +54,7 @@ class DocumentDelivery {
     this.cancelledBy,
     this.cancellationReason,
     this.cancelledAt,
+    this.proofOfPaymentBase64,
   });
 
   factory DocumentDelivery.fromFirestore(DocumentSnapshot doc) {
@@ -76,10 +78,10 @@ class DocumentDelivery {
       id: doc.id,
       senderId: data['senderId'] ?? data['userId'] ?? '',
       senderName: data['senderName'] ?? data['userName'] ?? data['sender_name'] ?? '',
-      senderPhone: data['senderPhone'] ?? data['sender_phone'] ?? data['phone'] ?? '',
+      senderPhone: data['senderPhone'] ?? data['sender_phone'] ?? data['senderContact'] ?? data['phone'] ?? '',
       senderEmail: data['senderEmail'] ?? data['userEmail'] ?? data['sender_email'] ?? '',
       receiverName: data['receiverName'] ?? data['receiver_name'] ?? '',
-      recipientPhone: data['recipientPhone'] ?? data['recipient_phone'] ?? '',
+      recipientPhone: data['recipientPhone'] ?? data['recipient_phone'] ?? data['receiverContact'] ?? data['recipientContact'] ?? '',
       recipientAddress: data['recipientAddress'] ?? data['recipient_address'] ?? data['address'] ?? '',
       documentType: data['documentType'] ?? data['document_Type'] ?? data['description'] ?? '',
       deliveryStatus: data['deliveryStatus'] ?? data['delivery_status'] ?? data['status'] ?? 'pending',
@@ -98,6 +100,7 @@ class DocumentDelivery {
       cancelledBy: data['cancelledBy'] ?? data['cancelled_by'],
       cancellationReason: data['cancellationReason'] ?? data['cancellation_reason'],
       cancelledAt: _parseDateNullable(data['cancelledAt'] ?? data['cancelled_at']),
+      proofOfPaymentBase64: data['proofOfPaymentBase64'] ?? data['paymentProofBase64'] ?? data['gcashProofBase64'],
     );
   }
 
@@ -106,9 +109,11 @@ class DocumentDelivery {
       'senderId': senderId,
       'senderName': senderName,
       'senderPhone': senderPhone,
+      'senderContact': senderPhone,
       'senderEmail': senderEmail,
       'receiverName': receiverName,
       'recipientPhone': recipientPhone,
+      'receiverContact': recipientPhone,
       'recipientAddress': recipientAddress,
       'documentType': documentType,
       'deliveryStatus': deliveryStatus,
@@ -127,6 +132,7 @@ class DocumentDelivery {
       'cancelledBy': cancelledBy,
       'cancellationReason': cancellationReason,
       'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
+      'proofOfPaymentBase64': proofOfPaymentBase64,
     };
   }
 
@@ -141,6 +147,7 @@ class DocumentDelivery {
     DateTime? cancelledAt,
     String? cancelledBy,
     String? cancellationReason,
+    String? proofOfPaymentBase64,
   }) {
     return DocumentDelivery(
       id: id,
@@ -168,6 +175,7 @@ class DocumentDelivery {
       cancelledBy: cancelledBy ?? this.cancelledBy,
       cancellationReason: cancellationReason ?? this.cancellationReason,
       cancelledAt: cancelledAt ?? this.cancelledAt,
+      proofOfPaymentBase64: proofOfPaymentBase64 ?? this.proofOfPaymentBase64,
     );
   }
 }

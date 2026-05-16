@@ -27,6 +27,8 @@ class VanRentalRequest {
   final String? driverLicenseBase64;
   final String? proofOfPurposeFileName;
   final String? proofOfPurposeBase64;
+  final String? proofOfPaymentFileName;
+  final String? proofOfPaymentBase64;
 
   const VanRentalRequest({
     required this.id,
@@ -53,6 +55,8 @@ class VanRentalRequest {
     this.driverLicenseBase64,
     this.proofOfPurposeFileName,
     this.proofOfPurposeBase64,
+    this.proofOfPaymentFileName,
+    this.proofOfPaymentBase64,
   });
 
   factory VanRentalRequest.fromFirestore(DocumentSnapshot doc) {
@@ -87,6 +91,8 @@ class VanRentalRequest {
       driverLicenseBase64: data['driverLicenseBase64'] as String?,
       proofOfPurposeFileName: data['proofOfPurposeFileName'] as String?,
       proofOfPurposeBase64: data['proofOfPurposeBase64'] as String?,
+      proofOfPaymentFileName: data['proofOfPaymentFileName'] as String?,
+      proofOfPaymentBase64: data['proofOfPaymentBase64'] as String?,
     );
   }
 

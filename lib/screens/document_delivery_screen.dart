@@ -1,3 +1,7 @@
+import 'dart:convert';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/document_delivery_model.dart';
@@ -616,15 +620,14 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
               children: [
                 _buildDetailSection('Sender Information', [
                   'Name: ${delivery.senderName}',
-                  'Phone: ${delivery.senderPhone}',
+                  'Sender Contact: ${delivery.senderPhone}',
                   if (delivery.senderEmail.isNotEmpty &&
                       !delivery.senderEmail.contains('@admin.'))
                     'Email: ${delivery.senderEmail}',
                 ]),
                 _buildDetailSection('Recipient Information', [
                   'Name: ${delivery.receiverName}',
-                  'Phone: ${delivery.recipientPhone}',
-                  'Address: ${delivery.recipientAddress}',
+                  'Receiver Contact: ${delivery.recipientPhone}',
                 ]),
                 _buildDetailSection('Document Information', [
                   'Description: ${delivery.documentType}',
@@ -655,6 +658,11 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
                   'Total: ${AppConstants.currencySymbol}${delivery.paymentAmount.toStringAsFixed(2)}',
                   'Payment Status: ${_formatStatus(delivery.paymentStatus)}',
                 ]),
+                if (_isGCashPayment(delivery.paymentMethod))
+                  _buildProofOfPaymentImage(
+                    delivery.proofOfPaymentBase64,
+                    title: 'Proof of Payment',
+                  ),
                 if (delivery.deliveryStatus == 'cancelled') ...[
                   _buildDetailSection('Cancellation Information', [
                     if (delivery.cancelledBy != null)
@@ -694,6 +702,130 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
         const SizedBox(height: 16),
       ],
     );
+  }
+
+  bool _isGCashPayment(String method) {
+    return method.toLowerCase().contains('gcash');
+  }
+
+  Widget _buildProofOfPaymentImage(String? base64Data, {required String title}) {
+    if (base64Data == null || base64Data.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    try {
+      final normalized = base64Data.contains(',')
+          ? base64Data.split(',').last
+          : base64Data;
+      final imageBytes = base64Decode(normalized);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => _showImagePreview(title, imageBytes),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                imageBytes,
+                height: 220,
+                width: double.infinity,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text('Unable to render proof of payment image.'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _showImagePreview(title, imageBytes),
+                icon: const Icon(Icons.zoom_in),
+                label: const Text('Enlarge'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _downloadBase64Image(base64Data, 'delivery_proof_of_payment'),
+                icon: const Icon(Icons.download),
+                label: const Text('Download'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      );
+    } catch (_) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Text(
+            'Proof of Payment',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          SizedBox(height: 8),
+          Text('Invalid proof of payment image data.'),
+          SizedBox(height: 16),
+        ],
+      );
+    }
+  }
+
+  void _showImagePreview(String title, Uint8List imageBytes) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: Image.memory(imageBytes, fit: BoxFit.contain),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _downloadBase64Image(String base64Data, String fileNamePrefix) {
+    final normalized = base64Data.contains(',')
+        ? base64Data.split(',').last
+        : base64Data;
+    final safeBase64 = normalized.replaceAll('\n', '');
+    final anchor = html.AnchorElement(
+      href: 'data:image/png;base64,$safeBase64',
+    )
+      ..download = '$fileNamePrefix.png'
+      ..target = '_blank';
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
   }
 
   // ─── Actions ──────────────────────────────────────────────────────────────────

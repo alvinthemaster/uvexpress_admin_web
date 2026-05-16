@@ -49,6 +49,7 @@ class Booking {
   final String bookingStatus; // confirmed, active, completed, cancelled
   final String? qrCodeData;
   final String? eTicketId;
+  final String? proofOfPaymentBase64;
   final PassengerDetails passengerDetails;
   final String? discountApplied;
   // Van-related fields (required by mobile app)
@@ -90,6 +91,7 @@ class Booking {
     required this.bookingStatus,
     this.qrCodeData,
     this.eTicketId,
+    this.proofOfPaymentBase64,
     required this.passengerDetails,
     this.discountApplied,
     this.vanPlateNumber,
@@ -132,6 +134,7 @@ class Booking {
       bookingStatus: data['bookingStatus'] ?? 'confirmed',
       qrCodeData: data['qrCodeData'],
       eTicketId: data['eTicketId'],
+        proofOfPaymentBase64: data['proofOfPaymentBase64'],
       passengerDetails:
           PassengerDetails.fromMap(data['passengerDetails'] ?? {}),
       discountApplied: data['discountApplied'],
@@ -172,6 +175,7 @@ class Booking {
       'bookingStatus': bookingStatus,
       'qrCodeData': qrCodeData,
       'eTicketId': eTicketId,
+      'proofOfPaymentBase64': proofOfPaymentBase64,
       'passengerDetails': passengerDetails.toMap(),
       'discountApplied': discountApplied,
       // Van details - required by mobile app
@@ -213,6 +217,7 @@ class Booking {
     String? bookingStatus,
     String? qrCodeData,
     String? eTicketId,
+    String? proofOfPaymentBase64,
     PassengerDetails? passengerDetails,
     String? discountApplied,
     String? vanPlateNumber,
@@ -250,6 +255,7 @@ class Booking {
       bookingStatus: bookingStatus ?? this.bookingStatus,
       qrCodeData: qrCodeData ?? this.qrCodeData,
       eTicketId: eTicketId ?? this.eTicketId,
+      proofOfPaymentBase64: proofOfPaymentBase64 ?? this.proofOfPaymentBase64,
       passengerDetails: passengerDetails ?? this.passengerDetails,
       discountApplied: discountApplied ?? this.discountApplied,
       vanPlateNumber: vanPlateNumber ?? this.vanPlateNumber,
