@@ -18,9 +18,10 @@ class VanRentalRequestProvider with ChangeNotifier {
 
   VanRentalRequestProvider() {
     _service.getRequestsStream().listen(
-      (data) {
+      (data) async {
         _requests = data;
         notifyListeners();
+        await _service.reconcileListingLocksFromRequests(data);
       },
       onError: (e) {
         _errorMessage = e.toString();
@@ -51,9 +52,32 @@ class VanRentalRequestProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> completeRequest(String id) async {
+  Future<bool> completeRequest(
+    String id, {
+    required Map<String, bool> vehicleChecklist,
+    required List<Map<String, dynamic>> damageLineItems,
+    required double damageAmount,
+    required double depositAmount,
+  }) async {
     try {
-      await _service.completeRequest(id);
+      await _service.completeRequest(
+        id,
+        vehicleChecklist: vehicleChecklist,
+        damageLineItems: damageLineItems,
+        damageAmount: damageAmount,
+        depositAmount: depositAmount,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> markInUse(String id) async {
+    try {
+      await _service.approveRequest(id);
       return true;
     } catch (e) {
       _errorMessage = e.toString();

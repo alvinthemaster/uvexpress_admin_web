@@ -1143,7 +1143,7 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
   final _searchCtrl = TextEditingController();
 
   final List<String> _statuses = [
-    'all', 'pending', 'approved', 'rejected', 'completed', 'cancelled'
+    'all', 'pending', 'completed', 'rejected', 'cancelled'
   ];
 
   @override
@@ -1222,6 +1222,7 @@ class _RentalRequestsTabState extends State<_RentalRequestsTab> {
         if (_search.isNotEmpty) {
           items = items.where((r) {
             return r.brand.toLowerCase().contains(_search) ||
+                r.vanPlateNumber.toLowerCase().contains(_search) ||
                 r.pickupLocation.toLowerCase().contains(_search) ||
                 r.purpose.toLowerCase().contains(_search);
           }).toList();
@@ -1344,10 +1345,25 @@ class _RequestCardState extends State<_RequestCard> {
                           style: TextStyle(
                               fontSize: 12, color: Colors.grey[600]),
                         ),
+                        if (request.vanPlateNumber.isNotEmpty)
+                          Text(
+                            'Plate: ${request.vanPlateNumber}',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[600]),
+                          ),
                       ],
                     ),
                   ),
-                  _statusBadge(request.status),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _statusBadge(request.status),
+                      if (request.subStatus == 'in_use' || request.subStatus == 'returned') ...[
+                        const SizedBox(height: 4),
+                        _subStatusBadge(request.subStatus),
+                      ],
+                    ],
+                  ),
                 ],
               ),
 
@@ -1383,20 +1399,20 @@ class _RequestCardState extends State<_RequestCard> {
                   ),
                   const Spacer(),
                   // Approve button — shown only for pending requests
-                  if (request.status == 'pending')
+                  if (request.status == 'pending' && request.subStatus != 'in_use')
                     ElevatedButton.icon(
                       onPressed: _isActing
                           ? null
                           : () => _doAction(
-                                () => provider.approveRequest(request.id),
-                                'Request approved successfully!',
+                                () => provider.markInUse(request.id),
+                                'Request moved to In Use.',
                               ),
                       icon: _isActing
                           ? const SizedBox(
                               width: 14, height: 14,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.check_circle_outline, size: 16),
-                      label: Text(_isActing ? 'Processing…' : 'Approve'),
+                      label: Text(_isActing ? 'Processing...' : 'Start Rental'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green[700],
                         foregroundColor: Colors.white,
@@ -1405,16 +1421,11 @@ class _RequestCardState extends State<_RequestCard> {
                         textStyle: const TextStyle(fontSize: 12),
                       ),
                     ),
-                  if (request.status == 'approved')
+                  if (request.status == 'pending' && request.subStatus == 'in_use')
                     _actionBtn(Icons.done_all, Colors.blueGrey,
-                        'Mark Complete',
-                        () => _doAction(
-                              () => provider.completeRequest(request.id),
-                              'Marked as completed!',
-                            )),
-                  if (request.status != 'cancelled' &&
-                      request.status != 'completed' &&
-                      request.status != 'rejected') ...[
+                        'Vehicle Return Checklist',
+                        () => _showReturnChecklistDialog(context, request)),
+                  if (request.status == 'pending' && request.subStatus != 'in_use') ...[
                     const SizedBox(width: 6),
                     _actionBtn(Icons.cancel_outlined, Colors.red,
                         'Reject / Cancel',
@@ -1475,8 +1486,10 @@ class _RequestCardState extends State<_RequestCard> {
   }
 
   void _updateStatusDialog(BuildContext context) {
-    const statuses = ['approved', 'rejected'];
-    String? selected = statuses.contains(request.status) ? request.status : null;
+    const statuses = ['in_use', 'rejected'];
+    String? selected = statuses.contains(request.subStatus)
+        ? request.subStatus
+        : (statuses.contains(request.status) ? request.status : null);
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
@@ -1505,14 +1518,14 @@ class _RequestCardState extends State<_RequestCard> {
                 onPressed: () => Navigator.pop(dialogCtx),
                 child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: selected == null || selected == request.status
+              onPressed: selected == null
                   ? null
                   : () {
                       final newStatus = selected!;
                       Navigator.pop(dialogCtx);
                       _doAction(() async {
-                        if (newStatus == 'approved') {
-                          return provider.approveRequest(request.id);
+                        if (newStatus == 'in_use') {
+                          return provider.markInUse(request.id);
                         }
                         return provider.rejectRequest(request.id);
                       }, 'Status updated to "$newStatus"');
@@ -1523,6 +1536,271 @@ class _RequestCardState extends State<_RequestCard> {
         ),
       ),
     );
+  }
+
+  void _showReturnChecklistDialog(BuildContext context, VanRentalRequest current) {
+    final depositAmount = current.depositAmount ?? 0.0;
+    final notesCtrl = TextEditingController();
+    final moneyFmt = NumberFormat.currency(symbol: 'PHP ', decimalDigits: 2);
+    final damageItems = <_DamageLineItemInput>[_DamageLineItemInput()];
+
+    bool vehicleReturned = true;
+    final checklist = <String, bool>{
+      'exterior_ok': true,
+      'lights_and_signals_ok': true,
+      'tires_ok': true,
+      'interior_clean': true,
+      'fuel_checked': true,
+      'documents_and_keys_returned': true,
+    };
+
+    void disposeInputs() {
+      notesCtrl.dispose();
+      for (final item in damageItems) {
+        item.dispose();
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (_, setDs) {
+          bool hasInvalidAmount = false;
+          bool hasMissingDescription = false;
+          double damageTotal = 0.0;
+          final linePayload = <Map<String, dynamic>>[];
+
+          for (final item in damageItems) {
+            final description = item.descriptionCtrl.text.trim();
+            final rawAmount = item.amountCtrl.text.trim();
+
+            if (description.isEmpty && rawAmount.isEmpty) {
+              continue;
+            }
+
+            if (rawAmount.isEmpty) {
+              hasInvalidAmount = true;
+              continue;
+            }
+
+            final amount = double.tryParse(rawAmount);
+            if (amount == null || amount < 0) {
+              hasInvalidAmount = true;
+              continue;
+            }
+
+            if (amount == 0) {
+              continue;
+            }
+
+            if (description.isEmpty) {
+              hasMissingDescription = true;
+              continue;
+            }
+
+            damageTotal += amount;
+            linePayload.add({
+              'description': description,
+              'amount': amount,
+            });
+          }
+
+          final validDamageLines = !hasInvalidAmount && !hasMissingDescription;
+          final deducted = damageTotal < depositAmount ? damageTotal : depositAmount;
+          final refund = depositAmount - deducted;
+          final excess = damageTotal > depositAmount ? damageTotal - depositAmount : 0.0;
+
+          return AlertDialog(
+            title: const Text('Vehicle Return Checklist'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CheckboxListTile(
+                      value: vehicleReturned,
+                      onChanged: (v) => setDs(() => vehicleReturned = v ?? false),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Vehicle has been returned'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Common vehicle checks',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    ...checklist.entries.map(
+                      (entry) => CheckboxListTile(
+                        value: entry.value,
+                        onChanged: (v) => setDs(() => checklist[entry.key] = v ?? false),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(_labelFromChecklistKey(entry.key)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Damage line items (optional)',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    ...damageItems.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: item.descriptionCtrl,
+                                decoration: InputDecoration(
+                                  labelText: 'Damage #${index + 1} description',
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setDs(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 140,
+                              child: TextField(
+                                controller: item.amountCtrl,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Amount',
+                                  prefixText: 'PHP ',
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setDs(() {}),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remove line',
+                              onPressed: damageItems.length == 1
+                                  ? null
+                                  : () {
+                                      final removed = damageItems.removeAt(index);
+                                      removed.dispose();
+                                      setDs(() {});
+                                    },
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          damageItems.add(_DamageLineItemInput());
+                          setDs(() {});
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add damage line'),
+                      ),
+                    ),
+                    if (hasInvalidAmount)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Each damage line amount must be a valid non-negative number.',
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    if (hasMissingDescription)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Add a description for every damage line with amount greater than zero.',
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Return notes (optional)',
+                        isDense: true,
+                      ),
+                    ),
+                    const Divider(height: 20),
+                    Text('Deposit: ${moneyFmt.format(depositAmount)}'),
+                    Text('Damage: ${moneyFmt.format(damageTotal)}'),
+                    Text('Deduct from deposit: ${moneyFmt.format(deducted)}'),
+                    Text(
+                      'Refund to customer: ${moneyFmt.format(refund)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (excess > 0)
+                      Text(
+                        'Customer should pay excess damage: ${moneyFmt.format(excess)}',
+                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: !vehicleReturned || !validDamageLines
+                    ? null
+                    : () {
+                        final checklistPayload = {
+                          ...checklist,
+                          'vehicle_returned': vehicleReturned,
+                          'notes_provided': notesCtrl.text.trim().isNotEmpty,
+                        };
+
+                        Navigator.pop(dialogCtx);
+                        _doAction(
+                          () => provider.completeRequest(
+                            current.id,
+                            vehicleChecklist: checklistPayload,
+                            damageLineItems: linePayload,
+                            damageAmount: damageTotal,
+                            depositAmount: depositAmount,
+                          ),
+                          'Request marked as completed.',
+                        );
+                      },
+                child: const Text('Complete Request'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) => disposeInputs());
+  }
+
+  String _labelFromChecklistKey(String key) {
+    switch (key) {
+      case 'exterior_ok':
+        return 'Exterior body condition is acceptable';
+      case 'lights_and_signals_ok':
+        return 'Lights and signals are working';
+      case 'tires_ok':
+        return 'Tires are in good condition';
+      case 'interior_clean':
+        return 'Interior is clean and intact';
+      case 'fuel_checked':
+        return 'Fuel level has been checked';
+      case 'documents_and_keys_returned':
+        return 'Documents and keys are returned';
+      default:
+        return key;
+    }
   }
 
   void _showDetail(BuildContext context) {
@@ -1575,12 +1853,24 @@ class _RequestCardState extends State<_RequestCard> {
                       onPressed: () => Navigator.pop(sheetCtx),
                       icon: const Icon(Icons.close)),
                 ]),
-                _statusBadge(liveReq.status),
+                Row(
+                  children: [
+                    _statusBadge(liveReq.status),
+                    if (liveReq.subStatus == 'in_use' || liveReq.subStatus == 'returned') ...[
+                      const SizedBox(width: 8),
+                      _subStatusBadge(liveReq.subStatus),
+                    ],
+                  ],
+                ),
                 const Divider(height: AppConstants.largePadding),
                 _dtRow(context, 'Payment',
                     liveReq.paymentStatus == 'paid' ? '✅ Paid' : '⏳ Pending'),
+                _dtRow(context, 'Sub-Status',
+                    _formatSubStatus(liveReq.subStatus)),
                 _dtRow(context, 'Brand / Model',
                     liveReq.brand.isNotEmpty ? liveReq.brand : '—'),
+                if (liveReq.vanPlateNumber.isNotEmpty)
+                  _dtRow(context, 'Van Plate Number', liveReq.vanPlateNumber),
                 _dtRow(context, 'Pickup', liveReq.pickupLocation),
                 _dtRow(context, 'Name', liveReq.dropoffLocation),
                 _dtRow(context, 'Purpose', liveReq.purpose),
@@ -1653,6 +1943,58 @@ class _RequestCardState extends State<_RequestCard> {
                 if (liveReq.completedAt != null)
                   _dtRow(context, 'Completed At',
                       dtf.format(liveReq.completedAt!)),
+                if (liveReq.returnedAt != null)
+                  _dtRow(context, 'Returned At',
+                      dtf.format(liveReq.returnedAt!)),
+                if (liveReq.damageAmount != null)
+                  _dtRow(context, 'Damage Amount',
+                      fmt.format(liveReq.damageAmount!)),
+                if (liveReq.damageLineItems != null &&
+                    liveReq.damageLineItems!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: AppConstants.smallPadding / 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: Text(
+                            'Damage Lines',
+                            style: TextStyle(
+                                color: Colors.grey[600], fontSize: 13),
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: liveReq.damageLineItems!
+                                .map((line) {
+                                  final description =
+                                      (line['description'] as String? ?? '')
+                                          .trim();
+                                  final amount =
+                                      (line['amount'] as num?)?.toDouble() ?? 0.0;
+                                  return Text(
+                                    '${description.isEmpty ? 'Unspecified damage' : description}: ${fmt.format(amount)}',
+                                    style: const TextStyle(fontSize: 13),
+                                  );
+                                })
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (liveReq.depositDeductedAmount != null)
+                  _dtRow(context, 'Deposit Deducted',
+                      fmt.format(liveReq.depositDeductedAmount!)),
+                if (liveReq.refundedAmount != null)
+                  _dtRow(context, 'Refunded to Customer',
+                      fmt.format(liveReq.refundedAmount!)),
+                if ((liveReq.damageExcessAmount ?? 0) > 0)
+                  _dtRow(context, 'Customer Pays Excess',
+                      fmt.format(liveReq.damageExcessAmount!)),
                 if (liveReq.cancelledAt != null)
                   _dtRow(context, 'Cancelled At',
                       dtf.format(liveReq.cancelledAt!)),
@@ -1687,7 +2029,7 @@ class _RequestCardState extends State<_RequestCard> {
                             ),
                           ),
                         ),
-                      if (liveReq.status == 'pending') ...[
+                      if (liveReq.status == 'pending' && liveReq.subStatus != 'in_use') ...[
                         const SizedBox(height: AppConstants.smallPadding),
                         Row(
                           children: [
@@ -1698,14 +2040,14 @@ class _RequestCardState extends State<_RequestCard> {
                                     : () {
                                         Navigator.pop(sheetCtx);
                                         _doAction(
-                                          () => provider.approveRequest(
+                                          () => provider.markInUse(
                                               liveReq.id),
-                                          'Request approved successfully!',
+                                          'Request moved to In Use.',
                                         );
                                       },
                                 icon: const Icon(
                                     Icons.check_circle_outline),
-                                label: const Text('Approve Request'),
+                                label: const Text('Start Rental'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.green[700],
                                   foregroundColor: Colors.white,
@@ -1735,7 +2077,7 @@ class _RequestCardState extends State<_RequestCard> {
                           ],
                         ),
                       ],
-                      if (liveReq.status == 'approved') ...[
+                      if (liveReq.status == 'pending' && liveReq.subStatus == 'in_use') ...[
                         const SizedBox(height: AppConstants.smallPadding),
                         SizedBox(
                           width: double.infinity,
@@ -1744,14 +2086,10 @@ class _RequestCardState extends State<_RequestCard> {
                                 ? null
                                 : () {
                                     Navigator.pop(sheetCtx);
-                                    _doAction(
-                                      () => provider.completeRequest(
-                                          liveReq.id),
-                                      'Marked as completed!',
-                                    );
+                                    _showReturnChecklistDialog(context, liveReq);
                                   },
                             icon: const Icon(Icons.done_all),
-                            label: const Text('Mark as Completed'),
+                            label: const Text('Vehicle Return Checklist'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blueGrey[700],
                               foregroundColor: Colors.white,
@@ -1848,6 +2186,48 @@ class _RequestCardState extends State<_RequestCard> {
               fontSize: 11,
               fontWeight: FontWeight.w600)),
     );
+  }
+
+  Widget _subStatusBadge(String subStatus) {
+    final cm = VanRentalRequest.subStatusColors;
+    final color = Color(cm[subStatus] ?? 0xFF9E9E9E);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        _formatSubStatus(subStatus),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  String _formatSubStatus(String subStatus) {
+    switch (subStatus) {
+      case 'in_use':
+        return 'In Use';
+      case 'returned':
+        return 'Returned';
+      default:
+        return 'None';
+    }
+  }
+}
+
+class _DamageLineItemInput {
+  final TextEditingController descriptionCtrl = TextEditingController();
+  final TextEditingController amountCtrl = TextEditingController();
+
+  void dispose() {
+    descriptionCtrl.dispose();
+    amountCtrl.dispose();
   }
 }
 

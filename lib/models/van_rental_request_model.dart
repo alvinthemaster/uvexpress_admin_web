@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Stored in the `van_rental_requests` Firestore collection.
 class VanRentalRequest {
   final String id;
+  final String? listingId;
+  final String? vanId;
+  final String vanPlateNumber;
   final String brand;
   final String pickupLocation;
   final String dropoffLocation;
@@ -12,7 +15,8 @@ class VanRentalRequest {
   final DateTime rentalStartDate;
   final DateTime rentalEndDate;
   final String specialRequirements;
-  final String status; // pending | approved | rejected | cancelled | completed
+  final String status; // pending | rejected | cancelled | completed
+  final String subStatus; // in_use | returned | none
   final String paymentStatus; // pending | paid
   final double totalAmount;
   final double? depositAmount;
@@ -20,8 +24,15 @@ class VanRentalRequest {
   final DateTime createdAt;
   final DateTime? confirmedAt;
   final DateTime? completedAt;
+  final DateTime? returnedAt;
   final DateTime? cancelledAt;
   final String? cancellationReason;
+  final Map<String, bool>? vehicleChecklist;
+  final double? damageAmount;
+  final List<Map<String, dynamic>>? damageLineItems;
+  final double? depositDeductedAmount;
+  final double? refundedAmount;
+  final double? damageExcessAmount;
   final bool withDriver;
   final String? driverLicenseFileName;
   final String? driverLicenseBase64;
@@ -32,6 +43,9 @@ class VanRentalRequest {
 
   const VanRentalRequest({
     required this.id,
+    this.listingId,
+    this.vanId,
+    this.vanPlateNumber = '',
     required this.brand,
     required this.pickupLocation,
     required this.dropoffLocation,
@@ -41,6 +55,7 @@ class VanRentalRequest {
     required this.rentalEndDate,
     required this.specialRequirements,
     required this.status,
+    this.subStatus = 'none',
     this.paymentStatus = 'pending',
     required this.totalAmount,
     this.depositAmount,
@@ -48,8 +63,15 @@ class VanRentalRequest {
     required this.createdAt,
     this.confirmedAt,
     this.completedAt,
+    this.returnedAt,
     this.cancelledAt,
     this.cancellationReason,
+    this.vehicleChecklist,
+    this.damageAmount,
+    this.damageLineItems,
+    this.depositDeductedAmount,
+    this.refundedAmount,
+    this.damageExcessAmount,
     this.withDriver = false,
     this.driverLicenseFileName,
     this.driverLicenseBase64,
@@ -63,6 +85,11 @@ class VanRentalRequest {
     final data = doc.data() as Map<String, dynamic>;
     return VanRentalRequest(
       id: doc.id,
+      listingId: data['listingId'] as String?,
+      vanId: data['vanId'] as String?,
+      vanPlateNumber: (data['vanPlateNumber'] as String?) ??
+          (data['plateNumber'] as String?) ??
+          '',
       brand: data['brand'] as String? ?? '',
       pickupLocation: data['pickupLocation'] as String? ?? '',
       dropoffLocation: data['dropoffLocation'] as String? ?? '',
@@ -74,6 +101,7 @@ class VanRentalRequest {
           (data['rentalEndDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       specialRequirements: data['specialRequirements'] as String? ?? '',
       status: data['status'] as String? ?? 'pending',
+      subStatus: data['subStatus'] as String? ?? 'none',
       paymentStatus: data['paymentStatus'] as String? ?? 'pending',
       totalAmount: (data['totalAmount'] as num?)?.toDouble() ?? 0.0,
       depositAmount: data['depositAmount'] != null
@@ -84,8 +112,23 @@ class VanRentalRequest {
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       confirmedAt: (data['confirmedAt'] as Timestamp?)?.toDate(),
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+      returnedAt: (data['returnedAt'] as Timestamp?)?.toDate(),
       cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
       cancellationReason: data['cancellationReason'] as String?,
+      vehicleChecklist: (data['vehicleChecklist'] as Map<String, dynamic>?)
+          ?.map((key, value) => MapEntry(key, value == true)),
+      damageAmount: (data['damageAmount'] as num?)?.toDouble(),
+      damageLineItems: (data['damageLineItems'] as List<dynamic>?)
+            ?.whereType<Map<String, dynamic>>()
+            .map((item) => {
+                  'description': (item['description'] as String? ?? '').trim(),
+                  'amount': (item['amount'] as num?)?.toDouble() ?? 0.0,
+                })
+            .toList(),
+      depositDeductedAmount:
+          (data['depositDeductedAmount'] as num?)?.toDouble(),
+      refundedAmount: (data['refundedAmount'] as num?)?.toDouble(),
+      damageExcessAmount: (data['damageExcessAmount'] as num?)?.toDouble(),
       withDriver: (data['withDriver'] ?? false) == true,
       driverLicenseFileName: data['driverLicenseFileName'] as String?,
       driverLicenseBase64: data['driverLicenseBase64'] as String?,
@@ -99,10 +142,16 @@ class VanRentalRequest {
   // Status colour map for UI badges
   static const Map<String, int> statusColors = {
     'pending': 0xFFF57C00,
-    'approved': 0xFF1976D2,
     'rejected': 0xFFB00020,
     'cancelled': 0xFF9E9E9E,
     'completed': 0xFF388E3C,
+  };
+
+  // Sub-status colour map for ongoing rental state
+  static const Map<String, int> subStatusColors = {
+    'in_use': 0xFF1976D2,
+    'returned': 0xFF388E3C,
+    'none': 0xFF9E9E9E,
   };
 
   // Payment status colour map
