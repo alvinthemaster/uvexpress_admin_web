@@ -1,15 +1,27 @@
-2026/05/17-11:58:26.490 5da4 Reusing MANIFEST C:\Users\yourb\AppData\Local\Temp\flutter_tools.b6a7e99e\flutter_tools_chrome_device.9b75d74e\Default\shared_proto_db/MANIFEST-000001
-2026/05/17-11:58:26.491 5da4 Recovering log #28
-2026/05/17-11:58:26.492 5da4 Reusing old log C:\Users\yourb\AppData\Local\Temp\flutter_tools.b6a7e99e\flutter_tools_chrome_device.9b75d74e\Default\shared_proto_db/000028.log 
-2026/05/17-11:58:26.493 5da4 Delete type=0 #3
-2026/05/17-11:58:26.493 5da4 Delete type=0 #4
-2026/05/17-11:58:26.493 5da4 Delete type=0 #7
-2026/05/17-11:58:26.493 5da4 Delete type=2 #8
-2026/05/17-11:58:26.493 5da4 Delete type=0 #10
-2026/05/17-11:58:26.493 5da4 Delete type=2 #11
-2026/05/17-11:58:26.493 5da4 Delete type=0 #13
-2026/05/17-11:58:26.493 5da4 Delete type=2 #14
-2026/05/17-11:58:26.493 5da4 Delete type=0 #16
-2026/05/17-11:58:26.493 5da4 Delete type=2 #17
-2026/05/17-11:58:26.493 5da4 Delete type=0 #19
-2026/05/17-11:58:26.493 5da4 Delete type=0 #23
+2026/05/19-19:25:47.155 824 Reusing MANIFEST C:\Users\yourb\AppData\Local\Temp\flutter_tools.a3b1d72c\flutter_tools_chrome_device.6ddfb41d\Default\shared_proto_db/MANIFEST-000001
+2026/05/19-19:25:47.156 824 Recovering log #28
+2026/05/19-19:25:47.158 824 Reusing old log C:\Users\yourb\AppData\Local\Temp\flutter_tools.a3b1d72c\flutter_tools_chrome_device.6ddfb41d\Default\shared_proto_db/000028.log 
+2026/05/19-19:25:47.158 824 Delete type=0 #3
+2026/05/19-19:25:47.158 824 Delete type=0 #4
+2026/05/19-19:25:47.158 824 Delete type=0 #7
+2026/05/19-19:25:47.158 824 Delete type=2 #8
+2026/05/19-19:25:47.158 824 Delete type=0 #10
+2026/05/19-19:25:47.158 824 Delete type=2 #11
+2026/05/19-19:25:47.158 824 Delete type=0 #13
+2026/05/19-19:25:47.159 824 Delete type=2 #14
+2026/05/19-19:25:47.159 824 Delete type=0 #16
+2026/05/19-19:25:47.159 824 Delete type=2 #17
+2026/05/19-19:25:47.159 824 Delete type=0 #19
+2026/05/19-19:25:47.159 824 Delete type=0 #23
+2026/05/19-19:25:59.224 56f4 Level-0 table #32: started
+2026/05/19-19:25:59.227 56f4 Level-0 table #32: 134574 bytes OK
+2026/05/19-19:25:59.230 56f4 Delete type=0 #28
+2026/05/19-19:25:59.230 56f4 Compacting 4@0 + 1@1 files
+2026/05/19-19:25:59.233 56f4 Generated table #33@0: 1889 keys, 67460 bytes
+2026/05/19-19:25:59.233 56f4 Compacted 4@0 + 1@1 files => 67460 bytes
+2026/05/19-19:25:59.237 56f4 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/05/19-19:25:59.237 56f4 Delete type=2 #21
+2026/05/19-19:25:59.238 56f4 Delete type=2 #24
+2026/05/19-19:25:59.238 56f4 Delete type=2 #27
+2026/05/19-19:25:59.238 56f4 Delete type=2 #29
+2026/05/19-19:25:59.238 56f4 Delete type=2 #32

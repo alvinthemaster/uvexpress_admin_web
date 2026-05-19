@@ -663,6 +663,10 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
                     delivery.proofOfPaymentBase64,
                     title: 'Proof of Payment',
                   ),
+                _buildProofOfPaymentImage(
+                  delivery.proofOfReceiptBase64,
+                  title: 'Proof of Delivery',
+                ),
                 if (delivery.deliveryStatus == 'cancelled') ...[
                   _buildDetailSection('Cancellation Information', [
                     if (delivery.cancelledBy != null)
@@ -762,14 +766,14 @@ class _DocumentDeliveryScreenState extends State<DocumentDeliveryScreen> {
     } catch (_) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
-            'Proof of Payment',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-          SizedBox(height: 8),
-          Text('Invalid proof of payment image data.'),
-          SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Text('Invalid $title image data.'),
+          const SizedBox(height: 16),
         ],
       );
     }

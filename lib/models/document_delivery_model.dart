@@ -27,6 +27,7 @@ class DocumentDelivery {
   final String? cancellationReason;
   final DateTime? cancelledAt;
   final String? proofOfPaymentBase64;
+  final String? proofOfReceiptBase64;
 
   DocumentDelivery({
     required this.id,
@@ -55,6 +56,7 @@ class DocumentDelivery {
     this.cancellationReason,
     this.cancelledAt,
     this.proofOfPaymentBase64,
+    this.proofOfReceiptBase64,
   });
 
   factory DocumentDelivery.fromFirestore(DocumentSnapshot doc) {
@@ -101,6 +103,7 @@ class DocumentDelivery {
       cancellationReason: data['cancellationReason'] ?? data['cancellation_reason'],
       cancelledAt: _parseDateNullable(data['cancelledAt'] ?? data['cancelled_at']),
       proofOfPaymentBase64: data['proofOfPaymentBase64'] ?? data['paymentProofBase64'] ?? data['gcashProofBase64'],
+      proofOfReceiptBase64: data['proofOfReceiptBase64'],
     );
   }
 
@@ -133,6 +136,7 @@ class DocumentDelivery {
       'cancellationReason': cancellationReason,
       'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
       'proofOfPaymentBase64': proofOfPaymentBase64,
+      'proofOfReceiptBase64': proofOfReceiptBase64,
     };
   }
 
@@ -148,6 +152,7 @@ class DocumentDelivery {
     String? cancelledBy,
     String? cancellationReason,
     String? proofOfPaymentBase64,
+    String? proofOfReceiptBase64,
   }) {
     return DocumentDelivery(
       id: id,
@@ -176,6 +181,7 @@ class DocumentDelivery {
       cancellationReason: cancellationReason ?? this.cancellationReason,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       proofOfPaymentBase64: proofOfPaymentBase64 ?? this.proofOfPaymentBase64,
+      proofOfReceiptBase64: proofOfReceiptBase64 ?? this.proofOfReceiptBase64,
     );
   }
 }
