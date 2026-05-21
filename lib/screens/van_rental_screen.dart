@@ -1431,11 +1431,13 @@ class _RequestCardState extends State<_RequestCard> {
                         'Reject / Cancel',
                         () => _rejectDialog(context)),
                   ],
-                  // Manual status updater (always visible)
-                  const SizedBox(width: 6),
-                  _actionBtn(Icons.edit_note, Colors.blueGrey,
-                      'Update Status',
-                      () => _updateStatusDialog(context)),
+                  // Manual status updater (hidden when completed)
+                  if (request.status != 'completed') ...[
+                    const SizedBox(width: 6),
+                    _actionBtn(Icons.edit_note, Colors.blueGrey,
+                        'Update Status',
+                        () => _updateStatusDialog(context)),
+                  ],
                 ],
               ),
             ],
@@ -1544,14 +1546,14 @@ class _RequestCardState extends State<_RequestCard> {
     final moneyFmt = NumberFormat.currency(symbol: 'PHP ', decimalDigits: 2);
     final damageItems = <_DamageLineItemInput>[_DamageLineItemInput()];
 
-    bool vehicleReturned = true;
+    bool vehicleReturned = false;
     final checklist = <String, bool>{
-      'exterior_ok': true,
-      'lights_and_signals_ok': true,
-      'tires_ok': true,
-      'interior_clean': true,
-      'fuel_checked': true,
-      'documents_and_keys_returned': true,
+      'exterior_ok': false,
+      'lights_and_signals_ok': false,
+      'tires_ok': false,
+      'interior_clean': false,
+      'fuel_checked': false,
+      'documents_and_keys_returned': false,
     };
 
     void disposeInputs() {
@@ -1569,6 +1571,7 @@ class _RequestCardState extends State<_RequestCard> {
           bool hasMissingDescription = false;
           double damageTotal = 0.0;
           final linePayload = <Map<String, dynamic>>[];
+          final requiresDamageLines = checklist.values.any((value) => !value);
 
           for (final item in damageItems) {
             final description = item.descriptionCtrl.text.trim();
@@ -1584,12 +1587,8 @@ class _RequestCardState extends State<_RequestCard> {
             }
 
             final amount = double.tryParse(rawAmount);
-            if (amount == null || amount < 0) {
+            if (amount == null || amount <= 0) {
               hasInvalidAmount = true;
-              continue;
-            }
-
-            if (amount == 0) {
               continue;
             }
 
@@ -1605,7 +1604,8 @@ class _RequestCardState extends State<_RequestCard> {
             });
           }
 
-          final validDamageLines = !hasInvalidAmount && !hasMissingDescription;
+          final hasRequiredDamageLines = !requiresDamageLines || linePayload.isNotEmpty;
+          final validDamageLines = !hasInvalidAmount && !hasMissingDescription && hasRequiredDamageLines;
           final deducted = damageTotal < depositAmount ? damageTotal : depositAmount;
           final refund = depositAmount - deducted;
           final excess = damageTotal > depositAmount ? damageTotal - depositAmount : 0.0;
@@ -1643,9 +1643,11 @@ class _RequestCardState extends State<_RequestCard> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Damage line items (optional)',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    Text(
+                      requiresDamageLines
+                          ? 'Damage line items (required when any checklist item is unchecked)'
+                          : 'Damage line items (optional)',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     ...damageItems.asMap().entries.map((entry) {
@@ -1710,7 +1712,7 @@ class _RequestCardState extends State<_RequestCard> {
                       const Padding(
                         padding: EdgeInsets.only(top: 6),
                         child: Text(
-                          'Each damage line amount must be a valid non-negative number.',
+                          'Each damage line amount must be a valid positive number.',
                           style: TextStyle(color: Colors.red, fontSize: 12),
                         ),
                       ),
@@ -1719,6 +1721,14 @@ class _RequestCardState extends State<_RequestCard> {
                         padding: EdgeInsets.only(top: 6),
                         child: Text(
                           'Add a description for every damage line with amount greater than zero.',
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    if (!hasRequiredDamageLines)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Add at least one damage line with a positive amount when any checklist item is unchecked.',
                           style: TextStyle(color: Colors.red, fontSize: 12),
                         ),
                       ),
@@ -2097,18 +2107,20 @@ class _RequestCardState extends State<_RequestCard> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: AppConstants.smallPadding),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(sheetCtx);
-                            _updateStatusDialog(context);
-                          },
-                          icon: const Icon(Icons.edit_note),
-                          label: const Text('Update Status'),
+                      if (liveReq.status != 'completed') ...[
+                        const SizedBox(height: AppConstants.smallPadding),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(sheetCtx);
+                              _updateStatusDialog(context);
+                            },
+                            icon: const Icon(Icons.edit_note),
+                            label: const Text('Update Status'),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
